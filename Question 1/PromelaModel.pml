@@ -123,8 +123,15 @@ proctype CM() {
 
 proctype WCP() {
 	mtype status = enable;
+	mtype message;
 	
 	do
+	:: CMtoWCP ? message ->
+		if 
+		:: (message == disable) ->
+			status = disable;
+		fi;
+	
 	:: if
 		:: (status == enable) ->
 			WCPtoCM ! reqUpdate;
