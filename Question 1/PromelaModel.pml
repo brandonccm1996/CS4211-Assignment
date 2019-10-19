@@ -1,37 +1,22 @@
-#define disconn		1
-#define disable		2
-#define enable		3
-#define idle		4
-#define preini		5
-#define ini			6
-#define postini		7
-
-#define reqConn		8
-#define succGetWtr	9
-#define failGetWtr	10
-#define succUseWtr	11
-#define failUseWtr	12
-#define getNewWtr	13
-#define useNewWtr	14
-
-#define reqUpdate	15
+mtype = {disconn, disable, enable, idle, preini, ini, postini, reqConn, 
+	succGetWtr, failGetWtr, succUseWtr, failUseWtr, getNewWtr, useNewWtr, reqUpdate};
 
 typedef clienttoCMComm {
 	int client_id;
-	byte reqMessage;
+	mtype reqMessage;
 }
 
-chan CMtoWCP = [5] of {byte};
-chan WCPtoCM = [5] of {byte};
+chan CMtoWCP = [5] of {mtype};
+chan WCPtoCM = [5] of {mtype};
 chan clientstoCMOverall = [5] of {clienttoCMComm};	// overall channel for all clients to talk to CM to initialise
-chan CMtoclients[10] = [5] of {byte};
-chan clientstoCM[10] = [5] of {byte};
+chan CMtoclients[10] = [5] of {mtype};
+chan clientstoCM[10] = [5] of {mtype};
 
 proctype client(int client_id) {
 	bool getWtrSucc = 0;
 	bool useWtrSucc = 0;
-	byte status = disconn;
-	byte message;
+	mtype status = disconn;
+	mtype message;
 	
 	clienttoCMComm req;
 	req.client_id = client_id;
@@ -78,7 +63,7 @@ proctype client(int client_id) {
 }
 
 proctype CM() {
-	byte status = idle;
+	mtype status = idle;
 	clienttoCMComm clientReq;
 	
 	do
@@ -100,7 +85,7 @@ proctype CM() {
 				CMtoclients[client_id] ! getNewWtr;
 				status = ini;
 				CMtoclients[client_id] ! ini;
-				byte succOrFailGetWtr;
+				mtype succOrFailGetWtr;
 				
 				do
 				:: clientstoCM[client_id] ? succOrFailGetWtr ->
@@ -109,7 +94,7 @@ proctype CM() {
 							CMtoclients[client_id] ! postini;
 							status = postini;
 							CMtoclients[client_id] ! useNewWtr;
-							byte succOrFailUseWtr;
+							mtype succOrFailUseWtr;
 
 							do
 							:: clientstoCM[client_id] ? succOrFailUseWtr ->
@@ -137,7 +122,7 @@ proctype CM() {
 }
 
 proctype WCP() {
-	byte status = enable;
+	mtype status = enable;
 	
 	do
 	:: if
