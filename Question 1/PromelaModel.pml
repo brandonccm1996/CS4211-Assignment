@@ -8,9 +8,12 @@ typedef clienttoCMComm {
 
 chan CMtoWCP = [5] of {mtype};
 chan WCPtoCM = [5] of {mtype};
-chan clientstoCMOverall = [5] of {clienttoCMComm};	// overall channel for all clients to talk to CM to initialise
-chan CMtoclients[10] = [5] of {mtype};
-chan clientstoCM[10] = [5] of {mtype};
+chan CMtoclients[5] = [5] of {mtype};
+chan clientstoCM[5] = [5] of {mtype};
+
+// overall channel for all clients to talk to CM to initialise
+// need to have this if not at the start when listening for reqConn messages, CM won't know which clientsToCM channel to listen to
+chan clientstoCMOverall = [5] of {clienttoCMComm};
 
 proctype client(int client_id) {
 	bool getWtrSucc = 0;
@@ -30,34 +33,34 @@ proctype client(int client_id) {
 	
 	:: CMtoclients[client_id] ? message -> 
 		if
-			:: (message == disconn) ->
-				skip;
-			:: (message == preini) ->
-				status = preini;
-			:: (message == ini) ->
-				status = ini;
+		:: (message == disconn) ->
+			status = disconn;
+		:: (message == preini) ->
+			status = preini;
+		:: (message == ini) ->
+			status = ini;
 
-			:: (message == getNewWtr) ->
-				if 
-					:: (getWtrSucc == 1) ->
-						getWtrSucc = 0;
-						clientstoCM[client_id] ! succGetWtr;
-					
-					:: (getWtrSucc == 0) ->
-						getWtrSucc = 1;
-						clientstoCM[client_id] ! failGetWtr;
-				fi;
+		:: (message == getNewWtr) ->
+			if 
+			:: (getWtrSucc == 1) ->
+				getWtrSucc = 0;
+				clientstoCM[client_id] ! succGetWtr;
+			
+			:: (getWtrSucc == 0) ->
+				getWtrSucc = 1;
+				clientstoCM[client_id] ! failGetWtr;
+			fi;
 
-			:: (message == useNewWtr) ->
-				if
-					:: (useWtrSucc == 1) ->
-						useWtrSucc = 0;
-						clientstoCM[client_id] ! succUseWtr;
-					
-					:: (useWtrSucc == 0) ->
-						useWtrSucc = 1;
-						clientstoCM[client_id] ! failUseWtr;
-				fi;
+		:: (message == useNewWtr) ->
+			if
+			:: (useWtrSucc == 1) ->
+				useWtrSucc = 0;
+				clientstoCM[client_id] ! succUseWtr;
+			
+			:: (useWtrSucc == 0) ->
+				useWtrSucc = 1;
+				clientstoCM[client_id] ! failUseWtr;
+			fi;
 		fi;
 	od;
 }
@@ -65,60 +68,54 @@ proctype client(int client_id) {
 proctype CM() {
 	mtype status = idle;
 	clienttoCMComm clientReq;
+	mtype message;
 	
 	do
 	:: clientstoCMOverall ? clientReq ->
 		int client_id = clientReq.client_id;
 		
 		if
-			:: (status == idle) ->
-				status = preini;
-				CMtoclients[client_id] ! preini;
-				CMtoWCP ! disable;
-			
-			:: (status != idle) ->
-				CMtoclients[client_id] ! disconn;
+		:: (status == idle && clientReq.reqMessage == reqConn) ->
+			status = preini;
+			CMtoclients[client_id] ! preini;
+			CMtoWCP ! disable;
+		
+		:: (status != idle && clientReq.reqMessage == reqConn) ->
+			CMtoclients[client_id] ! disconn;
 		fi;
 				
 		if 
-			:: (status == preini) ->
-				CMtoclients[client_id] ! getNewWtr;
-				status = ini;
-				CMtoclients[client_id] ! ini;
-				mtype succOrFailGetWtr;
+		:: (status == preini) ->
+			CMtoclients[client_id] ! getNewWtr;
+			status = ini;
+			CMtoclients[client_id] ! ini;
+			
+			clientstoCM[client_id] ? message ->
+			if
+			:: (message == succGetWtr) ->
+				CMtoclients[client_id] ! postini;
+				status = postini;
+				CMtoclients[client_id] ! useNewWtr;
+
+				clientstoCM[client_id] ? message ->
+				if
+				:: (message == succUseWtr) ->
+					status = idle;
+					CMtoclients[client_id] ! idle;
+					CMtoWCP ! enable;
 				
-				do
-				:: clientstoCM[client_id] ? succOrFailGetWtr ->
-					if
-						:: (succOrFailGetWtr == succGetWtr) ->
-							CMtoclients[client_id] ! postini;
-							status = postini;
-							CMtoclients[client_id] ! useNewWtr;
-							mtype succOrFailUseWtr;
+				:: (message == failUseWtr) ->
+					CMtoclients[client_id] ! disconn;
+					CMtoWCP ! enable;
+					status = idle;
+				fi;
 
-							do
-							:: clientstoCM[client_id] ? succOrFailUseWtr ->
-								if
-									:: (succOrFailUseWtr == succUseWtr) ->
-										status = idle;
-										CMtoclients[client_id] ! idle;
-										CMtoWCP ! enable;
-									
-									:: (succOrFailUseWtr == failUseWtr) ->
-										CMtoclients[client_id] ! disconn;
-										CMtoWCP ! enable;
-										status = idle;
-								fi;
-							od;
-
-						:: (succOrFailGetWtr == failGetWtr) ->
-							CMtoclients[client_id] ! disconn;
-							status = idle;
-					fi;
-				od;
+			:: (message == failGetWtr) ->
+				CMtoclients[client_id] ! disconn;
+				status = idle;
+			fi;
 		fi;
-
-	od
+	od;
 }
 
 proctype WCP() {
