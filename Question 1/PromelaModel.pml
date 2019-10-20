@@ -29,37 +29,37 @@ proctype client(int client_id) {
 		:: (status == disconn) ->
 			req.reqMessage = reqConn;
 			clientstoCMOverall ! req;
-		fi;
-	
-	:: CMtoclients[client_id] ? message -> 
-		if
-		:: (message == disconn) ->
-			status = disconn;
-		:: (message == preini) ->
-			status = preini;
-		:: (message == ini) ->
-			status = ini;
 
-		:: (message == getNewWtr) ->
-			if 
-			:: (getWtrSucc == 1) ->
-				getWtrSucc = 0;
-				clientstoCM[client_id] ! succGetWtr;
-			
-			:: (getWtrSucc == 0) ->
-				getWtrSucc = 1;
-				clientstoCM[client_id] ! failGetWtr;
-			fi;
-
-		:: (message == useNewWtr) ->
+			CMtoclients[client_id] ? message -> 
 			if
-			:: (useWtrSucc == 1) ->
-				useWtrSucc = 0;
-				clientstoCM[client_id] ! succUseWtr;
-			
-			:: (useWtrSucc == 0) ->
-				useWtrSucc = 1;
-				clientstoCM[client_id] ! failUseWtr;
+			:: (message == disconn) ->
+				status = disconn;
+			:: (message == preini) ->
+				status = preini;
+			:: (message == ini) ->
+				status = ini;
+
+			:: (message == getNewWtr) ->
+				if 
+				:: (getWtrSucc == 1) ->
+					getWtrSucc = 0;
+					clientstoCM[client_id] ! succGetWtr;
+				
+				:: (getWtrSucc == 0) ->
+					getWtrSucc = 1;
+					clientstoCM[client_id] ! failGetWtr;
+				fi;
+
+			:: (message == useNewWtr) ->
+				if
+				:: (useWtrSucc == 1) ->
+					useWtrSucc = 0;
+					clientstoCM[client_id] ! succUseWtr;
+				
+				:: (useWtrSucc == 0) ->
+					useWtrSucc = 1;
+					clientstoCM[client_id] ! failUseWtr;
+				fi;
 			fi;
 		fi;
 	od;
