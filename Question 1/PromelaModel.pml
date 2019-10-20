@@ -25,21 +25,22 @@ proctype client(int client_id) {
 	req.client_id = client_id;
 
 	do
-	:: if
-		:: (status == disconn) ->
-			req.reqMessage = reqConn;
-			clientstoCMOverall ! req;
-
-			CMtoclients[client_id] ? message -> 
+	:: (status == disconn) ->
+		req.reqMessage = reqConn;
+		clientstoCMOverall ! req;
+		
+		do
+		:: CMtoclients[client_id] ? message ->
 			if
+			:: (message == idle) ->
+				status = idle;
 			:: (message == disconn) ->
 				status = disconn;
+				break;
 			:: (message == preini) ->
 				status = preini;
-			:: (message == ini) ->
-				status = ini;
-
 			:: (message == getNewWtr) ->
+				status = ini;
 				if 
 				:: (getWtrSucc == 1) ->
 					getWtrSucc = 0;
@@ -49,8 +50,9 @@ proctype client(int client_id) {
 					getWtrSucc = 1;
 					clientstoCM[client_id] ! failGetWtr;
 				fi;
-
-			:: (message == useNewWtr) ->
+			
+			:: (message == useNewWtr) -> 
+				status = postini;
 				if
 				:: (useWtrSucc == 1) ->
 					useWtrSucc = 0;
@@ -61,7 +63,7 @@ proctype client(int client_id) {
 					clientstoCM[client_id] ! failUseWtr;
 				fi;
 			fi;
-		fi;
+		od;
 	od;
 }
 
@@ -88,14 +90,12 @@ proctype CM() {
 		:: (status == preini) ->
 			CMtoclients[client_id] ! getNewWtr;
 			status = ini;
-			CMtoclients[client_id] ! ini;
 			
 			clientstoCM[client_id] ? message ->
 			if
 			:: (message == succGetWtr) ->
-				CMtoclients[client_id] ! postini;
-				status = postini;
 				CMtoclients[client_id] ! useNewWtr;
+				status = postini;
 
 				clientstoCM[client_id] ? message ->
 				if
