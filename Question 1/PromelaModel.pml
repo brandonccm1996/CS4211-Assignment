@@ -1,17 +1,21 @@
+#define ARRAY_SIZE	20
+#define NUM_CLIENTS	5
+
 mtype = {disconn, disable, enable, idle, preini, ini, postini, reqConn, 
-	succGetWtr, failGetWtr, succUseWtr, failUseWtr, getNewWtr, useNewWtr, reqUpdate};
+	succGetWtr, failGetWtr, succUseNewWtr, failUseNewWtr, getNewWtr, useNewWtr, reqUpdate,
+	preupd, upd, postupd, postrev};
 
 typedef clienttoCMReqRep {	// client to CM request/report
 	int client_id;
 	mtype message;
 }
 
-chan CMtoWCP = [20] of {mtype};
-chan WCPtoCM = [10] of {mtype};
-chan CMtoclients[5] = [10] of {mtype};
+chan CMtoWCP = [ARRAY_SIZE] of {mtype};
+chan WCPtoCM = [ARRAY_SIZE] of {mtype};
+chan CMtoclients[NUM_CLIENTS] = [ARRAY_SIZE] of {mtype};
 
 // overall channel for all clients to request/report to CM
-chan clientstoCM = [30] of {clienttoCMReqRep};
+chan clientstoCM = [ARRAY_SIZE] of {clienttoCMReqRep};
 
 proctype client(int client_id) {
 	bool getWtrSucc = 1;
@@ -37,8 +41,11 @@ proctype client(int client_id) {
 				break;
 			:: (CMInmessage == preini) ->
 				status = preini;
-			:: (CMInmessage == getNewWtr) ->
+			:: (CMInmessage == ini) ->
 				status = ini;
+			:: (CMInmessage == postini) ->
+				status = postini;
+			:: (CMInmessage == getNewWtr) ->
 				if 
 				:: (getWtrSucc == 1) ->
 					getWtrSucc = 0;
@@ -52,16 +59,15 @@ proctype client(int client_id) {
 				fi;
 			
 			:: (CMInmessage == useNewWtr) -> 
-				status = postini;
 				if
 				:: (useWtrSucc == 1) ->
 					useWtrSucc = 0;
-					req_rep.message = succUseWtr;
+					req_rep.message = succUseNewWtr;
 					clientstoCM ! req_rep;
 				
 				:: (useWtrSucc == 0) ->
 					useWtrSucc = 1;
-					req_rep.message = failUseWtr;
+					req_rep.message = failUseNewWtr;
 					clientstoCM ! req_rep;
 				fi;
 			fi;
@@ -80,7 +86,7 @@ proctype CM() {
 	:: clientstoCM ? clientInReqRep ->
 		if
 		:: (status == idle && clientInReqRep.message == reqConn) ->
-			clientConnecting = clientInReqRep.client_id;	// clientToConnect can only be changed here i.e. if CM status is idle and it gets reqConn from client
+			clientConnecting = clientInReqRep.client_id;	// clientConnecting can only be changed here i.e. if CM status is idle and it gets reqConn from client
 			status = preini;
 			CMtoclients[clientConnecting] ! preini;
 			CMtoWCP ! disable;
@@ -88,6 +94,7 @@ proctype CM() {
 			(status == preini) ->
 				CMtoclients[clientConnecting] ! getNewWtr;
 				status = ini;
+				CMtoclients[clientConnecting] ! ini;
 		
 		:: (status != idle && clientInReqRep.message == reqConn) ->
 			clientToRefuse = clientInReqRep.client_id;
@@ -100,17 +107,18 @@ proctype CM() {
 		:: (clientInReqRep.message == succGetWtr) ->
 			CMtoclients[clientConnecting] ! useNewWtr;
 			status = postini;
+			CMtoclients[clientConnecting] ! postini;
 		
 		:: (clientInReqRep.message == failGetWtr) ->
 			CMtoclients[clientConnecting] ! disconn;
 			status = idle;
 
-		:: (clientInReqRep.message == succUseWtr) ->
+		:: (clientInReqRep.message == succUseNewWtr) ->
 			status = idle;
 			CMtoclients[clientConnecting] ! idle;
 			CMtoWCP ! enable;
 
-		:: (clientInReqRep.message == failUseWtr) ->
+		:: (clientInReqRep.message == failUseNewWtr) ->
 			CMtoclients[clientConnecting] ! disconn;
 			CMtoWCP ! enable;
 			status = idle;
@@ -127,6 +135,8 @@ proctype WCP() {
 		if 
 		:: (message == disable) ->
 			status = disable;
+		:: (message == enable) ->
+			status = enable;
 		fi;
 	
 	:: if
