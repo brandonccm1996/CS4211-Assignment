@@ -277,26 +277,26 @@ proctype WCP() {
 	mtype message;
 	
 	do
-	:: CMtoWCP ? message ->
-		if 
-		:: (message == disable) ->
-			status = disable;
-		:: (message == enable) ->
-			status = enable;
-		fi;
-	
-	:: if
-		:: (status == enable) ->
-			WCPtoCM ! reqUpdate;
-		fi;
-	
+	:: (status == enable) ->
+		WCPtoCM ! reqUpdate;
+		
+		do
+		:: CMtoWCP ? message ->
+			if
+			:: (message == disable) ->
+				status = disable;
+			:: (message == enable) ->
+				status = enable;
+				break;
+			fi;
+		od;
 	od;
 }
 
 init {
 	run WCP();
-	run client(0);
 	run client(1);
 	run client(2);
+	run client(3);
 	run CM();
 }
