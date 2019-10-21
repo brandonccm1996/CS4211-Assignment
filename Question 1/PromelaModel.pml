@@ -52,6 +52,8 @@ proctype client(int client_id) {
 				status = upd;
 			:: (CMInmessage == postupd) ->
 				status = postupd;
+			:: (CMInmessage == postrev) ->
+				status = postrev;
 			:: (CMInmessage == getNewWtr) ->
 				if 
 				:: (getWtrSucc == 1) ->
@@ -278,6 +280,15 @@ proctype CM() {
 					dummy = 0;
 					break;
 				od;
+				status = upd;
+				do
+				:: (dummy != numClientsConnected) ->
+					CMtoclients[clientsConnected[dummy]] ! upd;
+					dummy = dummy + 1;
+				:: (dummy == numClientsConnected) -> 
+					dummy = 0;
+					break;
+				od;
 		fi;
 	od;
 }
@@ -294,7 +305,6 @@ proctype WCP() {
 		:: (message == enable) ->
 			status = enable;
 			(status == enable) -> WCPtoCM ! reqUpdate;
-			break;
 		fi;
 	od;
 }
