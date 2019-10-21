@@ -159,38 +159,42 @@ proctype CM() {
 			numClientsReportSuccGetWtr = numClientsReportSuccGetWtr + 1;
 			(numClientsReportSuccGetWtr == numClientsConnected) ->
 				do
-				:: CMtoclients[clientsConnected[dummy2]] ! useNewWtr;
+				:: (dummy2 != numClientsConnected) ->
+					CMtoclients[clientsConnected[dummy2]] ! useNewWtr;
 					dummy2 = dummy2 + 1;
-					(dummy2 == numClientsConnected) ->
-						dummy2 = 0;
-						break;
+				:: (dummy2 == numClientsConnected) ->
+					dummy2 = 0;
+					break;
 				od;
 				status = postupd;
 				do
-				:: CMtoclients[clientsConnected[dummy2]] ! postupd;
+				:: (dummy2 != numClientsConnected) ->
+					CMtoclients[clientsConnected[dummy2]] ! postupd;
 					dummy2 = dummy2 + 1;
-					(dummy2 == numClientsConnected) ->
-						dummy2 = 0;
-						break;
+				:: (dummy2 == numClientsConnected) ->
+					dummy2 = 0;
+					break;
 				od;
 				numClientsReportSuccGetWtr = 0;	// reset
 		
 		:: (status == upd && clientInReqRep.message == failGetWtr) ->
 			numClientsReportSuccGetWtr = 0;	// reset
 			do
-			:: CMtoclients[clientsConnected[dummy2]] ! useOldWtr;
+			:: (dummy2 != numClientsConnected) ->
+				CMtoclients[clientsConnected[dummy2]] ! useOldWtr;
 				dummy2 = dummy2 + 1;
-				(dummy2 == numClientsConnected) ->
-					dummy2 = 0;
-					break;
+			:: (dummy2 == numClientsConnected) ->
+				dummy2 = 0;
+				break;
 			od;
 			status = postrev;
 			do
-			:: CMtoclients[clientsConnected[dummy2]] ! postrev;
+			:: (dummy2 != numClientsConnected) ->
+				CMtoclients[clientsConnected[dummy2]] ! postrev;
 				dummy2 = dummy2 + 1;
-				(dummy2 == numClientsConnected) ->
-					dummy2 = 0;
-					break;
+			:: (dummy2 == numClientsConnected) ->
+				dummy2 = 0;
+				break;
 			od;
 		
 		:: (status == postupd && clientInReqRep.message == succUseNewWtr) ->
@@ -198,11 +202,12 @@ proctype CM() {
 			(numClientsReportSuccGetWtr == numClientsConnected) ->
 				status = idle;
 				do
-				:: CMtoclients[clientsConnected[dummy2]] ! idle;
+				:: (dummy2 != numClientsConnected) ->
+					CMtoclients[clientsConnected[dummy2]] ! idle;
 					dummy2 = dummy2 + 1;
-					(dummy2 == numClientsConnected) ->
-						dummy2 = 0;
-						break;
+				:: (dummy2 == numClientsConnected) ->
+					dummy2 = 0;
+					break;
 				od;
 				CMtoWCP ! enable;
 				numClientsReportSuccUseNewWtr = 0;	// reset
@@ -210,11 +215,12 @@ proctype CM() {
 		:: (status == postupd && clientInReqRep.message == failUseNewWtr) ->
 			numClientsReportSuccUseNewWtr = 0;	// reset
 			do
-			:: CMtoclients[clientsConnected[dummy2]] ! disconn;
+			:: (dummy2 != numClientsConnected) ->
+				CMtoclients[clientsConnected[dummy2]] ! disconn;
 				dummy2 = dummy2 + 1;
-				(dummy2 == numClientsConnected) ->
-					dummy2 = 0;
-					break;
+			:: (dummy2 == numClientsConnected) ->
+				dummy2 = 0;
+				break;
 			od;
 			numClientsConnected = 0;	// reset
 			CMtoWCP ! enable;
@@ -225,22 +231,24 @@ proctype CM() {
 			(numClientsReportSuccUseOldWtr == numClientsConnected) ->
 				status = idle;
 				do
-				:: CMtoclients[clientsConnected[dummy2]] ! idle;
+				:: (dummy2 != numClientsConnected) ->
+					CMtoclients[clientsConnected[dummy2]] ! idle;
 					dummy2 = dummy2 + 1;
-					(dummy2 == numClientsConnected) ->
-						dummy2 = 0;
-						break;
+				:: (dummy2 == numClientsConnected) ->
+					dummy2 = 0;
+					break;
 				od;
 				CMtoWCP ! enable;
 
 		:: (status == postrev && clientInReqRep.message == failUseOldWtr) ->
 			numClientsReportSuccUseOldWtr = 0;	// reset
 			do
-			:: CMtoclients[clientsConnected[dummy2]] ! disconn;
+			:: (dummy2 != numClientsConnected) ->
+				CMtoclients[clientsConnected[dummy2]] ! disconn;
 				dummy2 = dummy2 + 1;
-				(dummy2 == numClientsConnected) ->
-					dummy2 = 0;
-					break;
+			:: (dummy2 == numClientsConnected) ->
+				dummy2 = 0;
+				break;
 			od;
 			numClientsConnected = 0;	// reset
 			CMtoWCP ! enable;
@@ -252,21 +260,23 @@ proctype CM() {
 		:: (status == idle && WCPInMessage == reqUpdate) ->
 			status = preupd;
 			do
-			:: CMtoclients[clientsConnected[dummy]] ! preupd;
+			:: (dummy != numClientsConnected) ->
+				CMtoclients[clientsConnected[dummy]] ! preupd;
 				dummy = dummy + 1;
-				(dummy == numClientsConnected) -> 
-					dummy = 0;
-					break;
+			:: (dummy == numClientsConnected) -> 
+				dummy = 0;
+				break;
 			od;
 			
 			CMtoWCP ! disable;
 			(status == preupd) ->
 				do
-				:: CMtoclients[clientsConnected[dummy]] ! getNewWtr;
+				:: (dummy != numClientsConnected) ->
+					CMtoclients[clientsConnected[dummy]] ! getNewWtr;
 					dummy = dummy + 1;
-					(dummy == numClientsConnected) -> 
-						dummy = 0;
-						break;
+				:: (dummy == numClientsConnected) -> 
+					dummy = 0;
+					break;
 				od;
 		fi;
 	od;
