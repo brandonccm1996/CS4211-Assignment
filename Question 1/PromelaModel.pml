@@ -275,21 +275,17 @@ proctype CM() {
 proctype WCP() {
 	mtype status = enable;
 	mtype message;
-	
+
 	do
-	:: (status == enable) ->
-		WCPtoCM ! reqUpdate;
-		
-		do
-		:: CMtoWCP ? message ->
-			if
-			:: (message == disable) ->
-				status = disable;
-			:: (message == enable) ->
-				status = enable;
-				break;
-			fi;
-		od;
+	:: CMtoWCP ? message ->
+		if
+		:: (message == disable) ->
+			status = disable;
+		:: (message == enable) ->
+			status = enable;
+			(status == enable) -> WCPtoCM ! reqUpdate;
+			break;
+		fi;
 	od;
 }
 
