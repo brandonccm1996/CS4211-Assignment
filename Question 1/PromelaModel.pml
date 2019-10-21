@@ -81,6 +81,12 @@ proctype CM() {
 	mtype message;
 	int clientConnecting;
 	int clientToRefuse;
+
+	int clientsConnected [NUM_CLIENTS];
+	int numClientsConnected = 0;
+	int dummy = 0;
+
+	mtype WCPInMessage;
 	
 	do
 	:: clientstoCM ? clientInReqRep ->
@@ -117,11 +123,36 @@ proctype CM() {
 			status = idle;
 			CMtoclients[clientConnecting] ! idle;
 			CMtoWCP ! enable;
+			clientsConnected[numClientsConnected] = clientConnecting;
+			numClientsConnected = numClientsConnected + 1;
 
 		:: (clientInReqRep.message == failUseNewWtr) ->
 			CMtoclients[clientConnecting] ! disconn;
 			CMtoWCP ! enable;
 			status = idle;
+		fi;
+	
+	:: WCPtoCM ? WCPInMessage ->
+		if
+		:: (status == idle && WCPInMessage == reqUpdate) ->
+			status = preupd;
+			do
+			:: CMtoclients[clientsConnected[dummy]] ! preupd;
+				dummy = dummy + 1;
+				(dummy == numClientsConnected) -> 
+					dummy = 0;
+					break;
+			od;
+			
+			CMtoWCP ! disable;
+			(status == preupd) ->
+				do
+				:: CMtoclients[clientsConnected[dummy]] ! getNewWtr;
+					dummy = dummy + 1;
+					(dummy == numClientsConnected) -> 
+						dummy = 0;
+						break;
+				od;
 		fi;
 	od;
 }
