@@ -1,4 +1,4 @@
-#define ARRAY_SIZE	20
+#define ARRAY_SIZE	10
 #define NUM_CLIENTS	5
 
 mtype = {disconn, disable, enable, idle, preini, ini, postini, reqConn, 
@@ -18,9 +18,6 @@ chan CMtoclients[NUM_CLIENTS] = [ARRAY_SIZE] of {mtype};
 chan clientstoCM = [ARRAY_SIZE] of {clienttoCMReqRep};
 
 proctype client(int client_id) {
-	bool getWtrSucc = 1;
-	bool useNewWtrSucc = 1;
-	bool useOldWtrSucc = 1;
 	mtype status = disconn;
 	mtype CMInmessage;	// CM incoming message
 	
@@ -54,44 +51,27 @@ proctype client(int client_id) {
 				status = postupd;
 			:: (CMInmessage == postrev) ->
 				status = postrev;
+
 			:: (CMInmessage == getNewWtr) ->
-				if 
-				:: (getWtrSucc == 1) ->
-					getWtrSucc = 0;
-					req_rep.message = succGetWtr;
-					clientstoCM ! req_rep;
-				
-				:: (getWtrSucc == 0) ->
-					getWtrSucc = 1;
-					req_rep.message = failGetWtr;
-					clientstoCM ! req_rep;
+				if
+				:: req_rep.message = succGetWtr;
+				:: req_rep.message = failGetWtr;
 				fi;
+				clientstoCM ! req_rep;
 			
 			:: (CMInmessage == useNewWtr) -> 
 				if
-				:: (useNewWtrSucc == 1) ->
-					useNewWtrSucc = 0;
-					req_rep.message = succUseNewWtr;
-					clientstoCM ! req_rep;
-				
-				:: (useNewWtrSucc == 0) ->
-					useNewWtrSucc = 1;
-					req_rep.message = failUseNewWtr;
-					clientstoCM ! req_rep;
+				:: req_rep.message = succUseNewWtr;
+				:: req_rep.message = failUseNewWtr;
 				fi;
+				clientstoCM ! req_rep;
 
 			:: (CMInmessage == useOldWtr) -> 
 				if
-				:: (useOldWtrSucc == 1) ->
-					useOldWtrSucc = 0;
-					req_rep.message = succUseOldWtr;
-					clientstoCM ! req_rep;
-				
-				:: (useOldWtrSucc == 0) ->
-					useOldWtrSucc = 1;
-					req_rep.message = failUseOldWtr;
-					clientstoCM ! req_rep;
+				:: req_rep.message = succUseOldWtr;
+				:: req_rep.message = failUseOldWtr;
 				fi;
+				clientstoCM ! req_rep;
 			fi;
 		od;
 	od;
@@ -100,7 +80,6 @@ proctype client(int client_id) {
 proctype CM() {
 	mtype status = idle;
 	clienttoCMReqRep clientInReqRep;	// client incoming request/report
-	mtype message;
 	int clientConnecting;
 	int clientToRefuse;
 
@@ -131,10 +110,6 @@ proctype CM() {
 		:: (status != idle && clientInReqRep.message == reqConn) ->
 			clientToRefuse = clientInReqRep.client_id;
 			CMtoclients[clientToRefuse] ! disconn;
-
-		// :: (status == preini) ->
-		// 	CMtoclients[clientConnecting] ! getNewWtr;
-		// 	status = ini;
 
 		:: (status == ini && clientInReqRep.message == succGetWtr) ->
 			CMtoclients[clientConnecting] ! useNewWtr;
@@ -306,6 +281,7 @@ proctype CM() {
 					dummy = 0;
 					break;
 				od;
+			:: else -> skip;
 		fi;
 	od;
 }
