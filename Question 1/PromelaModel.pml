@@ -17,9 +17,9 @@ chan CMtoclients[NUM_CLIENTS] = [ARRAY_SIZE] of {mtype};
 chan clientstoCM = [ARRAY_SIZE] of {clienttoCMReqRep};
 
 mtype WCPstatus = enable;
+mtype clientsStatus[NUM_CLIENTS] = {disconn, disconn, disconn, disconn, disconn};
 
 proctype client(int client_id) {
-	mtype status = disconn;
 	mtype CMInmessage;	// CM incoming message
 	
 	clienttoCMReqRep req_rep;
@@ -27,32 +27,16 @@ proctype client(int client_id) {
 
 	do
 	// A disconnected weather-aware client can establish a connection by sending a connecting request to the CM.
-	:: (status == disconn) ->
+	:: (clientsStatus[client_id] == disconn) ->
 		req_rep.message = reqConn;
 		clientstoCM ! req_rep;
 		
 		do
 		:: CMtoclients[client_id] ? CMInmessage ->
 			if
-			:: (CMInmessage == idle) ->
-				status = idle;
 			:: (CMInmessage == disconn) ->
-				status = disconn;
+				clientsStatus[client_id] = disconn;
 				break;
-			:: (CMInmessage == preini) ->
-				status = preini;
-			:: (CMInmessage == ini) ->
-				status = ini;
-			:: (CMInmessage == postini) ->
-				status = postini;
-			:: (CMInmessage == preupd) ->
-				status = preupd;
-			:: (CMInmessage == upd) ->
-				status = upd;
-			:: (CMInmessage == postupd) ->
-				status = postupd;
-			:: (CMInmessage == postrev) ->
-				status = postrev;
 
 			:: (CMInmessage == getNewWtr) ->
 				if
@@ -105,7 +89,7 @@ proctype CM() {
 		:: (status == idle && clientInReqRep.message == reqConn) ->
 			clientConnecting = clientInReqRep.client_id;	// clientConnecting can only be changed here i.e. if CM status is idle and it gets reqConn from client
 			status = preini;
-			CMtoclients[clientConnecting] ! preini;
+			clientsStatus[clientConnecting] = preini;
 			WCPstatus = disable;
 
 			// When the CM is pre-initializing, it will send a message to instruct the newly connected client to get
@@ -113,7 +97,7 @@ proctype CM() {
 			(status == preini) ->
 				CMtoclients[clientConnecting] ! getNewWtr;
 				status = ini;
-				CMtoclients[clientConnecting] ! ini;
+				clientsStatus[clientConnecting] = ini;
 		
 		// Otherwise (CMs status is not idle), the CM will send a message to the client to refuse the connection,
 		// and the client remains disconnected.
@@ -125,7 +109,7 @@ proctype CM() {
 		:: (status == ini && clientInReqRep.message == succGetWtr) ->
 			CMtoclients[clientConnecting] ! useNewWtr;
 			status = postini;
-			CMtoclients[clientConnecting] ! postini;
+			clientsStatus[clientConnecting] = postini;
 		
 		// Otherwise, if getting new weather fails, the CM will disconnect the client and set its own status back to idle.
 		:: (status == ini && clientInReqRep.message == failGetWtr) ->
@@ -136,7 +120,7 @@ proctype CM() {
 		// CM will set both its own status and the clients status to idle, and re-enable the WCP
 		:: (status == postini && clientInReqRep.message == succUseNewWtr) ->
 			status = idle;
-			CMtoclients[clientConnecting] ! idle;
+			clientsStatus[clientConnecting] = idle;
 			WCPstatus = enable;
 			clientsConnected[numClientsConnected] = clientConnecting;
 			numClientsConnected = numClientsConnected + 1;
@@ -167,7 +151,7 @@ proctype CM() {
 				status = postupd;
 				do
 				:: (dummy2 != numClientsConnected) ->
-					CMtoclients[clientsConnected[dummy2]] ! postupd;
+					clientsStatus[clientsConnected[dummy2]] = postupd;
 					dummy2 = dummy2 + 1;
 				:: (dummy2 == numClientsConnected) ->
 					dummy2 = 0;
@@ -193,7 +177,7 @@ proctype CM() {
 			status = postrev;
 			do
 			:: (dummy2 != numClientsConnected) ->
-				CMtoclients[clientsConnected[dummy2]] ! postrev;
+				clientsStatus[clientsConnected[dummy2]] = postrev;
 				dummy2 = dummy2 + 1;
 			:: (dummy2 == numClientsConnected) ->
 				dummy2 = 0;
@@ -209,7 +193,7 @@ proctype CM() {
 				status = idle;
 				do
 				:: (dummy2 != numClientsConnected) ->
-					CMtoclients[clientsConnected[dummy2]] ! idle;
+					clientsStatus[clientsConnected[dummy2]] = idle;
 					dummy2 = dummy2 + 1;
 				:: (dummy2 == numClientsConnected) ->
 					dummy2 = 0;
@@ -247,7 +231,7 @@ proctype CM() {
 				status = idle;
 				do
 				:: (dummy2 != numClientsConnected) ->
-					CMtoclients[clientsConnected[dummy2]] ! idle;
+					clientsStatus[clientsConnected[dummy2]] = idle;
 					dummy2 = dummy2 + 1;
 				:: (dummy2 == numClientsConnected) ->
 					dummy2 = 0;
@@ -288,7 +272,7 @@ proctype CM() {
 			status = preupd;
 			do
 			:: (dummy != numClientsConnected) ->
-				CMtoclients[clientsConnected[dummy]] ! preupd;
+				clientsStatus[clientsConnected[dummy]] = preupd;
 				dummy = dummy + 1;
 			:: (dummy == numClientsConnected) -> 
 				dummy = 0;
@@ -311,13 +295,13 @@ proctype CM() {
 				status = upd;
 				do
 				:: (dummy != numClientsConnected) ->
-					CMtoclients[clientsConnected[dummy]] ! upd;
+					clientsStatus[clientsConnected[dummy]] = upd;
 					dummy = dummy + 1;
 				:: (dummy == numClientsConnected) -> 
 					dummy = 0;
 					break;
 				od;
-			:: else -> skip;
+		:: else -> skip;
 		fi;
 	od;
 }
