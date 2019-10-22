@@ -10,12 +10,13 @@ typedef clienttoCMReqRep {	// client to CM request/report
 	mtype message;
 }
 
-chan CMtoWCP = [ARRAY_SIZE] of {mtype};
 chan WCPtoCM = [ARRAY_SIZE] of {mtype};
 chan CMtoclients[NUM_CLIENTS] = [ARRAY_SIZE] of {mtype};
 
 // overall channel for all clients to request/report to CM
 chan clientstoCM = [ARRAY_SIZE] of {clienttoCMReqRep};
+
+mtype WCPstatus = enable;
 
 proctype client(int client_id) {
 	mtype status = disconn;
@@ -25,6 +26,7 @@ proctype client(int client_id) {
 	req_rep.client_id = client_id;
 
 	do
+	// A disconnected weather-aware client can establish a connection by sending a connecting request to the CM.
 	:: (status == disconn) ->
 		req_rep.message = reqConn;
 		clientstoCM ! req_rep;
@@ -81,7 +83,6 @@ proctype CM() {
 	mtype status = idle;
 	clienttoCMReqRep clientInReqRep;	// client incoming request/report
 	int clientConnecting;
-	int clientToRefuse;
 
 	int clientsConnected [NUM_CLIENTS];
 	int numClientsConnected = 0;
@@ -96,42 +97,61 @@ proctype CM() {
 	do
 	:: clientstoCM ? clientInReqRep ->
 		if
+		
+		/* ********** CLIENT INITIALIZATION ********** */
+
+		// If the CMs status is idle when the connecting request is received, it will set both its own status and the 
+		// connecting clients status to pre-initializing, and disable the weather control panel
 		:: (status == idle && clientInReqRep.message == reqConn) ->
 			clientConnecting = clientInReqRep.client_id;	// clientConnecting can only be changed here i.e. if CM status is idle and it gets reqConn from client
 			status = preini;
 			CMtoclients[clientConnecting] ! preini;
-			CMtoWCP ! disable;
+			WCPstatus = disable;
 
+			// When the CM is pre-initializing, it will send a message to instruct the newly connected client to get
+			// the new weather information, and then set both its own status and the clients status to initializing.
 			(status == preini) ->
 				CMtoclients[clientConnecting] ! getNewWtr;
 				status = ini;
 				CMtoclients[clientConnecting] ! ini;
 		
+		// Otherwise (CMs status is not idle), the CM will send a message to the client to refuse the connection,
+		// and the client remains disconnected.
 		:: (status != idle && clientInReqRep.message == reqConn) ->
-			clientToRefuse = clientInReqRep.client_id;
-			CMtoclients[clientToRefuse] ! disconn;
+			CMtoclients[clientInReqRep.client_id] ! disconn;
 
+		// If the client reports success for getting the new weather, the CM will send another message to inform
+		// the client to use the weather information, and then set both its own status and the clients status to post-initializing.
 		:: (status == ini && clientInReqRep.message == succGetWtr) ->
 			CMtoclients[clientConnecting] ! useNewWtr;
 			status = postini;
 			CMtoclients[clientConnecting] ! postini;
 		
+		// Otherwise, if getting new weather fails, the CM will disconnect the client and set its own status back to idle.
 		:: (status == ini && clientInReqRep.message == failGetWtr) ->
 			CMtoclients[clientConnecting] ! disconn;
 			status = idle;
 
+		// If the client reports success for using the new weather, this initialization process is completed. the
+		// CM will set both its own status and the clients status to idle, and re-enable the WCP
 		:: (status == postini && clientInReqRep.message == succUseNewWtr) ->
 			status = idle;
 			CMtoclients[clientConnecting] ! idle;
-			CMtoWCP ! enable;
+			WCPstatus = enable;
 			clientsConnected[numClientsConnected] = clientConnecting;
 			numClientsConnected = numClientsConnected + 1;
 
+		// Otherwise, if using new weather fails, the CM will disconnect the client, re-enable the WCP, and set its own status back to idle.
 		:: (status == postini && clientInReqRep.message == failUseNewWtr) ->
 			CMtoclients[clientConnecting] ! disconn;
-			CMtoWCP ! enable;
+			WCPstatus = enable;
 			status = idle;
 
+
+		/* ********** WEATHER UPDATE ********** */
+
+		// If all the clients report success for getting the new weather, the CM will send messages to inform
+		// the clients to use the new weather information, and then set its own status and the clients status to post-updating.
 		:: (status == upd && clientInReqRep.message == succGetWtr) ->
 			numClientsReportSuccGetWtr = numClientsReportSuccGetWtr + 1;
 			if
@@ -158,6 +178,8 @@ proctype CM() {
 				skip;
 			fi;
 		
+		// Otherwise, if any of the connected clients reports failure for getting the new weather, the CM will send messages to 
+		// all clients to use their old weather information, and then set its own status and the clients status to post-reverting.
 		:: (status == upd && clientInReqRep.message == failGetWtr) ->
 			numClientsReportSuccGetWtr = 0;	// reset
 			do
@@ -178,6 +200,8 @@ proctype CM() {
 				break;
 			od;
 		
+		// When CMs status is post-updating, if all the clients report success for using the new weather, the
+		// updating is completed. The CM will set its own status and the clients status to idle, and re-enable the WCP.
 		:: (status == postupd && clientInReqRep.message == succUseNewWtr) ->
 			numClientsReportSuccUseNewWtr = numClientsReportSuccUseNewWtr + 1;
 			if
@@ -191,12 +215,14 @@ proctype CM() {
 					dummy2 = 0;
 					break;
 				od;
-				CMtoWCP ! enable;
+				WCPstatus = enable;
 				numClientsReportSuccUseNewWtr = 0;	// reset
 			:: (numClientsReportSuccUseNewWtr != numClientsConnected) ->
 				skip;
 			fi;
 
+		// Otherwise, if any of the connected clients reports failure for using the new weather, the CM
+		// will disconnect all connected clients, re-enable the WCP, and set its own status back to idle.
 		:: (status == postupd && clientInReqRep.message == failUseNewWtr) ->
 			numClientsReportSuccUseNewWtr = 0;	// reset
 			do
@@ -209,9 +235,11 @@ proctype CM() {
 				break;
 			od;
 			numClientsConnected = 0;	// reset
-			CMtoWCP ! enable;
+			WCPstatus = enable;
 			status = idle;
 
+		// When CMs status is post-reverting, if all the clients report success for using the old weather, the
+		// reverting is completed. The CM will set its own status and the clients status to idle, and re-enable the WCP.
 		:: (status == postrev && clientInReqRep.message == succUseOldWtr) ->
 			numClientsReportSuccUseOldWtr = numClientsReportSuccUseOldWtr + 1;
 			if
@@ -225,12 +253,14 @@ proctype CM() {
 					dummy2 = 0;
 					break;
 				od;
-				CMtoWCP ! enable;
+				WCPstatus = enable;
 				numClientsReportSuccUseOldWtr = 0;	// reset
 			:: (numClientsReportSuccUseOldWtr != numClientsConnected) ->
 				skip;
 			fi;
 
+		// Otherwise, if any of the connected clients reports failure for using the old weather, the CM will
+		// disconnect all connected clients, re-enable the WCP, and set its own status back to idle.
 		:: (status == postrev && clientInReqRep.message == failUseOldWtr) ->
 			numClientsReportSuccUseOldWtr = 0;	// reset
 			do
@@ -243,7 +273,7 @@ proctype CM() {
 				break;
 			od;
 			numClientsConnected = 0;	// reset
-			CMtoWCP ! enable;
+			WCPstatus = enable;
 			status = idle;
 		
 		:: else -> skip;
@@ -251,6 +281,9 @@ proctype CM() {
 	
 	:: WCPtoCM ? WCPInMessage ->
 		if
+
+		// When the CM is idle and receives update request from the WCP, it will set its own status and all
+		// the connected weather-aware clients status to pre-updating, and disable the WCP
 		:: (status == idle && WCPInMessage == reqUpdate) ->
 			status = preupd;
 			do
@@ -262,7 +295,10 @@ proctype CM() {
 				break;
 			od;
 			
-			CMtoWCP ! disable;
+			WCPstatus = disable;
+
+			// When CMs status is pre-updating, it will send messages to instruct all connected clients to get the new
+			// weather information, and then set its own status and the clients status to updating.
 			(status == preupd) ->
 				do
 				:: (dummy != numClientsConnected) ->
@@ -287,25 +323,19 @@ proctype CM() {
 }
 
 proctype WCP() {
-	mtype status = enable;
-	mtype message;
-
 	do
-	:: CMtoWCP ? message ->
-		if
-		:: (message == disable) ->
-			status = disable;
-		:: (message == enable) ->
-			status = enable;
-			(status == enable) -> WCPtoCM ! reqUpdate;
-		fi;
+	
+	// User can manually update new weather information only when the WCP is enabled. By clicking the
+	// update button on the WCP, a update message is sent to the CM.
+	:: (WCPstatus == enable) ->
+		WCPtoCM ! reqUpdate;
 	od;
 }
 
 init {
 	run WCP();
-	run client(1);
 	run client(2);
 	run client(3);
+	run client(4);
 	run CM();
 }
