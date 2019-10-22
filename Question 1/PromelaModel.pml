@@ -159,7 +159,8 @@ proctype CM() {
 
 		:: (status == upd && clientInReqRep.message == succGetWtr) ->
 			numClientsReportSuccGetWtr = numClientsReportSuccGetWtr + 1;
-			(numClientsReportSuccGetWtr == numClientsConnected) ->
+			if
+			:: (numClientsReportSuccGetWtr == numClientsConnected) ->
 				do
 				:: (dummy2 != numClientsConnected) ->
 					CMtoclients[clientsConnected[dummy2]] ! useNewWtr;
@@ -178,6 +179,9 @@ proctype CM() {
 					break;
 				od;
 				numClientsReportSuccGetWtr = 0;	// reset
+			:: (numClientsReportSuccGetWtr != numClientsConnected) ->
+				skip;
+			fi;
 		
 		:: (status == upd && clientInReqRep.message == failGetWtr) ->
 			numClientsReportSuccGetWtr = 0;	// reset
@@ -201,7 +205,8 @@ proctype CM() {
 		
 		:: (status == postupd && clientInReqRep.message == succUseNewWtr) ->
 			numClientsReportSuccUseNewWtr = numClientsReportSuccUseNewWtr + 1;
-			(numClientsReportSuccGetWtr == numClientsConnected) ->
+			if
+			:: (numClientsReportSuccUseNewWtr == numClientsConnected) ->
 				status = idle;
 				do
 				:: (dummy2 != numClientsConnected) ->
@@ -213,12 +218,16 @@ proctype CM() {
 				od;
 				CMtoWCP ! enable;
 				numClientsReportSuccUseNewWtr = 0;	// reset
+			:: (numClientsReportSuccUseNewWtr != numClientsConnected) ->
+				skip;
+			fi;
 
 		:: (status == postupd && clientInReqRep.message == failUseNewWtr) ->
 			numClientsReportSuccUseNewWtr = 0;	// reset
 			do
 			:: (dummy2 != numClientsConnected) ->
 				CMtoclients[clientsConnected[dummy2]] ! disconn;
+				clientsConnected[dummy2] = 0;	// for clarity
 				dummy2 = dummy2 + 1;
 			:: (dummy2 == numClientsConnected) ->
 				dummy2 = 0;
@@ -230,7 +239,8 @@ proctype CM() {
 
 		:: (status == postrev && clientInReqRep.message == succUseOldWtr) ->
 			numClientsReportSuccUseOldWtr = numClientsReportSuccUseOldWtr + 1;
-			(numClientsReportSuccUseOldWtr == numClientsConnected) ->
+			if
+			:: (numClientsReportSuccUseOldWtr == numClientsConnected) ->
 				status = idle;
 				do
 				:: (dummy2 != numClientsConnected) ->
@@ -241,12 +251,17 @@ proctype CM() {
 					break;
 				od;
 				CMtoWCP ! enable;
+				numClientsReportSuccUseOldWtr = 0;	// reset
+			:: (numClientsReportSuccUseOldWtr != numClientsConnected) ->
+				skip;
+			fi;
 
 		:: (status == postrev && clientInReqRep.message == failUseOldWtr) ->
 			numClientsReportSuccUseOldWtr = 0;	// reset
 			do
 			:: (dummy2 != numClientsConnected) ->
 				CMtoclients[clientsConnected[dummy2]] ! disconn;
+				clientsConnected[dummy2] = 0;	// for clarity
 				dummy2 = dummy2 + 1;
 			:: (dummy2 == numClientsConnected) ->
 				dummy2 = 0;
@@ -255,6 +270,8 @@ proctype CM() {
 			numClientsConnected = 0;	// reset
 			CMtoWCP ! enable;
 			status = idle;
+		
+		:: else -> skip;
 		fi;
 	
 	:: WCPtoCM ? WCPInMessage ->
