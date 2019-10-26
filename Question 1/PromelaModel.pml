@@ -118,6 +118,8 @@ proctype CM() {
 			clientConnecting = clientInReqRep.client_id;	// clientConnecting can only be changed here i.e. if CM status is idle and it gets reqConn from client
 			status = preini;
 			clientsStatus[clientConnecting] = preini;
+			clientsConnected[numClientsConnected] = clientConnecting;	// pre ini status is considered connected already
+			numClientsConnected = numClientsConnected + 1;
 			WCPstatus = disable;
 
 		// Otherwise (CMs status is not idle), the CM will send a message to the client to refuse the connection,
@@ -135,6 +137,8 @@ proctype CM() {
 		// Otherwise, if getting new weather fails, the CM will disconnect the client and set its own status back to idle.
 		:: (status == ini && clientInReqRep.message == failGetWtr) ->
 			CMtoclients[clientConnecting] ! disconn;
+			numClientsConnected = numClientsConnected - 1;
+			clientsConnected[numClientsConnected] = 0;
 			status = idle;
 
 		// If the client reports success for using the new weather, this initialization process is completed. the
@@ -143,12 +147,12 @@ proctype CM() {
 			status = idle;
 			clientsStatus[clientConnecting] = idle;
 			WCPstatus = enable;
-			clientsConnected[numClientsConnected] = clientConnecting;
-			numClientsConnected = numClientsConnected + 1;
 
 		// Otherwise, if using new weather fails, the CM will disconnect the client, re-enable the WCP, and set its own status back to idle.
 		:: (status == postini && clientInReqRep.message == failUseNewWtr) ->
 			CMtoclients[clientConnecting] ! disconn;
+			numClientsConnected = numClientsConnected - 1;
+			clientsConnected[numClientsConnected] = 0;
 			WCPstatus = enable;
 			status = idle;
 
