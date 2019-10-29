@@ -1,5 +1,5 @@
 #define NUM_STATIONS	6
-#define ARRAY_SIZE		10
+#define ARRAY_SIZE		3
 #define NUM_SHUTTLES	3
 
 typedef orderType {
@@ -38,6 +38,10 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 	int targetStationToUnload = 0;
 	int dummy;
 	int dummy2;
+	int nextDest1;
+	int nextDest2;
+	int difference1;
+	int difference2;
 
 	shuttlePos[shuttleId].origin = startStation;
 	shuttlePos[shuttleId].dest = startStation;
@@ -58,7 +62,7 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 		:: (order.orderOrAssign == 0) ->
 			if 
 			:: (order.load + currLoad <= capacity) ->
-				int difference = shuttlePos[shuttleId].end - order.start;
+				int difference = shuttlePos[shuttleId].dest - order.start;
 				if
 				:: (difference <= 2 && difference >= -2) ->
 					reply.offerOrRefuse = 1;
@@ -70,14 +74,18 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 						reply.offerOrRefuse = 1;
 					:: else ->
 						reply.offerOrRefuse = 0;
+					fi;
 				fi;				
 			:: (order.load + currLoad > capacity) ->
 				reply.offerOrRefuse = 0;
 			fi;
 			
-			shuttlesToManagement[shuttleId] ! reply;
+			shuttlesToManagement ! reply;
 		:: (order.orderOrAssign == 1) ->
-			ordersAssigned[numOrdersAssigned] = order;
+			ordersAssigned[numOrdersAssigned].start = order.start;
+			ordersAssigned[numOrdersAssigned].end = order.end;
+			ordersAssigned[numOrdersAssigned].load = order.load;
+			ordersAssigned[numOrdersAssigned].orderOrAssign = order.orderOrAssign;
 			numOrdersAssigned = numOrdersAssigned + 1;
 		fi;
 	
@@ -85,66 +93,187 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 	:: (shuttlePos[shuttleId].origin != shuttlePos[shuttleId].dest) ->
 		shuttlePos[shuttleId].origin = shuttlePos[shuttleId].dest; 
 			
-	// Shuttle at station
-	:: (shuttlePos[shuttleId].origin == shuttlePos[shuttleId].dest) ->
-		if
+	// // Shuttle at station
+	// :: (shuttlePos[shuttleId].origin == shuttlePos[shuttleId].dest) ->
+	// 	if
 
-		// finish executing an order
-		:: (targetStationToUnload == shuttlePos[shuttleId].dest) ->
-			numOrdersBeingExecuted = numOrdersBeingExecuted - 1;
-			currLoad = currLoad - ordersBeingExecuted[0].load;
-			dummy = numOrdersBeingExecuted;
-			dummy2 = 0;
+	// 	// UNLOAD THE ORDER THAT IT IS EXECUTING
+	// 	:: (targetStationToUnload == shuttlePos[shuttleId].dest) ->
+	// 		numOrdersBeingExecuted = numOrdersBeingExecuted - 1;
+	// 		currLoad = currLoad - ordersBeingExecuted[0].load;
+	// 		dummy = numOrdersBeingExecuted;
+	// 		dummy2 = 0;
 
-			// move all orders forward to cover up first cell
-			do
-			:: (dummy != 0) ->
-				ordersBeingExecuted[dummy2] = ordersBeingExecuted[dummy2 + 1];
-				dummy2 = dummy2 + 1;
-			:: (dummy == 0) ->
-				break;
+	// 		// move all remaining orders it is executing one step forward to cover up first cell
+	// 		do
+	// 		:: (dummy != 0) ->
+	// 			ordersBeingExecuted[dummy2].start = ordersBeingExecuted[dummy2 + 1].start;
+	// 			ordersBeingExecuted[dummy2].end = ordersBeingExecuted[dummy2 + 1].end;
+	// 			ordersBeingExecuted[dummy2].load = ordersBeingExecuted[dummy2 + 1].load;
+	// 			ordersBeingExecuted[dummy2].orderOrAssign = ordersBeingExecuted[dummy2 + 1].orderOrAssign;
+	// 			dummy2 = dummy2 + 1;
+	// 		:: (dummy == 0) ->
+	// 			break;
+	// 		od;
 
-			if 
-			:: (numOrdersBeingExecuted == 0) -> 
-				targetStationToUnload = 0;
-			:: (numOrdersBeingExecuted != 0) ->
-				targetStationToUnload = ordersBeingExecuted[0].end;
+	// 		if 
+	// 		:: (numOrdersBeingExecuted == 0) -> 
+	// 			targetStationToUnload = 0;
+	// 		:: (numOrdersBeingExecuted != 0) ->
+	// 			targetStationToUnload = ordersBeingExecuted[0].end;
+	// 		fi;
 
-		// still executing an order
-		:: (targetStationToUnload != shuttlePos[shuttleId].dest && targetStationToUnload != 0) ->
+	// 	// GO TO THE STATION TO UNLOAD THE ORDER THAT IT IS EXECUTING
+	// 	:: (targetStationToUnload != shuttlePos[shuttleId].dest && targetStationToUnload != 0) ->
+			
+	// 		// find the shortest way to go to station to unload
+	// 		nextDest1 = shuttlePos[shuttleId].dest + 1;
+	// 		if
+	// 		:: (nextDest1 > NUM_STATIONS) ->
+	// 			nextDest1 = 0;
+	// 		fi;
+	// 		nextDest2 = shuttlePos[shuttleId].dest - 1;
+	// 		if
+	// 		:: (nextDest2 == 0) ->
+	// 			nextDest2 = NUM_STATIONS;
+	// 		fi;
 
-		:: (targetStationToUnload == 0 && targetStationToLoad != 0) ->
-			if
-			:: (targetStationToLoad == shuttlePos[shuttleId].dest) ->
+	// 		difference1 = nextDest1 - targetStationToUnload;
+	// 		if
+	// 		:: (difference1 < (NUM_STATIONS/2)) ->
+	// 			difference1 = difference1 + NUM_STATIONS;
+	// 		fi;
+	// 		if
+	// 		:: (difference1 < 0) ->
+	// 			difference1 = 0 - difference1;
+	// 		fi;
 
-		:: (targetStationToUnload == 0 && targetStationToLoad == 0) ->
+	// 		difference2 = nextDest2 - targetStationToUnload;
+	// 		if
+	// 		:: (difference2 < (NUM_STATIONS/2)) ->
+	// 			difference2 = difference2 + NUM_STATIONS;
+	// 		fi;
+	// 		if
+	// 		:: (difference2 < 0) ->
+	// 			difference2 = 0 - difference2;
+	// 		fi;
 
+	// 		if
+	// 		:: (difference1 <= difference2) ->
+	// 			shuttlePos[shuttleId].dest = nextDest1;
+	// 		:: (difference1 > difference2) ->
+	// 			shuttlePos[shuttleId].dest = nextDest2;
+	// 		fi;
+
+	// 	// NOT CURRENTLY EXECUTING ANY ORDERS, BUT HAVE ORDERS ASSIGNED
+	// 	:: (targetStationToUnload == 0 && targetStationToLoad != 0) ->
+			
+	// 		if
+	// 		// LOAD THE ORDER THAT IS ASSIGNED
+	// 		:: (targetStationToLoad == shuttlePos[shuttleId].dest) ->
+	// 			numOrdersAssigned = numOrdersAssigned - 1;
+	// 			currLoad = currLoad + ordersBeingExecuted[numOrdersBeingExecuted].load;
+	// 			numOrdersBeingExecuted = numOrdersBeingExecuted + 1;
+	// 			dummy = numOrdersBeingExecuted;
+	// 			dummy2 = 0;
+
+	// 			// move all remaining assigned orders one step forward to cover up first cell
+	// 			do
+	// 			:: (dummy != 0) ->
+	// 				ordersAssigned[dummy2].start = ordersAssigned[dummy2 + 1].start;
+	// 				ordersAssigned[dummy2].end = ordersAssigned[dummy2 + 1].end;
+	// 				ordersAssigned[dummy2].load = ordersAssigned[dummy2 + 1].load;
+	// 				ordersAssigned[dummy2].orderOrAssign = ordersAssigned[dummy2 + 1].orderOrAssign;
+	// 				dummy2 = dummy2 + 1;
+	// 			:: (dummy == 0) ->
+	// 				break;
+	// 			od;
+
+	// 			if 
+	// 			:: (numOrdersAssigned == 0) -> 
+	// 				targetStationToLoad = 0;
+	// 			:: (numOrdersAssigned != 0) ->
+	// 				targetStationToLoad = ordersAssigned[0].end;
+	// 			fi;
+
+	// 		// GO TO THE STATION TO LOAD THE ORDER THAT IS ASSIGNED
+	// 		:: (targetStationToLoad != shuttlePos[shuttleId].dest) ->
+				
+	// 			// find the shortest way to go to station to load order
+	// 			nextDest1 = shuttlePos[shuttleId].dest + 1;
+	// 			if
+	// 			:: (nextDest1 > NUM_STATIONS) ->
+	// 				nextDest1 = 0;
+	// 			fi;
+	// 			nextDest2 = shuttlePos[shuttleId].dest - 1;
+	// 			if
+	// 			:: (nextDest2 == 0) ->
+	// 				nextDest2 = NUM_STATIONS;
+	// 			fi;
+
+	// 			difference1 = nextDest1 - targetStationToLoad;
+	// 			if
+	// 			:: (difference1 < (NUM_STATIONS/2)) ->
+	// 				difference1 = difference1 + NUM_STATIONS;
+	// 			fi;
+	// 			if
+	// 			:: (difference1 < 0) ->
+	// 				difference1 = 0 - difference1;
+	// 			fi;
+
+	// 			difference2 = nextDest2 - targetStationToLoad;
+	// 			if
+	// 			:: (difference2 < (NUM_STATIONS/2)) ->
+	// 				difference2 = difference2 + NUM_STATIONS;
+	// 			fi;
+	// 			if
+	// 			:: (difference2 < 0) ->
+	// 				difference2 = 0 - difference2;
+	// 			fi;
+
+	// 			if
+	// 			:: (difference1 <= difference2) ->
+	// 				shuttlePos[shuttleId].dest = nextDest1;
+	// 			:: (difference1 > difference2) ->
+	// 				shuttlePos[shuttleId].dest = nextDest2;
+	// 			fi;
+	// 		fi;
+
+	// 	// NOT CURRENTLY EXECUTING ANY ORDERS, NO ORDERS ASSIGNED
+	// 	:: (targetStationToUnload == 0 && targetStationToLoad == 0) ->
+	// 		skip;
+	// 	fi;
 	od;
-
 }
 
 proctype management() {
 	orderType orders[ARRAY_SIZE];
 	orderType order;
-	orderType assignmt;
 	int lowestOfferReceived = -1;
 	int shuttleToOffer = 0;
 	int numShuttlesReplied = 0;
 	int numShuttlesSent = 0;
 	shuttleReply reply;
 	int dummy = 0;
+	int NUM_ORDERS = 2;
 
-	order[0].start = 1;
-	order[0].end = 3;
-	order[0].load = 4;
-	order[0].orderOrAssign = 0;
-	order[1].start = 2;
-	order[1].end = 3;
-	order[1].load = 1;
-	order[1].orderOrAssign = 0;
+	orders[0].start = 1;
+	orders[0].end = 3;
+	orders[0].load = 4;
+	orders[0].orderOrAssign = 0;
+	orders[1].start = 2;
+	orders[1].end = 3;
+	orders[1].load = 1;
+	orders[1].orderOrAssign = 0;
 
 	do
-	:: order = orders[dummy];
+	:: (dummy == NUM_ORDERS) ->
+		break;
+	:: (dummy != NUM_ORDERS) ->
+		order.start = orders[dummy].start;
+		order.end = orders[dummy].end;
+		order.load = orders[dummy].load;
+		order.orderOrAssign = orders[dummy].orderOrAssign;
 		dummy = dummy + 1;
 
 		// Orders are made known to all shuttles by the management system.
@@ -168,8 +297,11 @@ proctype management() {
 			numShuttlesReplied = numShuttlesReplied + 1;
 			if 
 			:: (reply.offerOrRefuse == 0) -> skip;
-			:: (reply.offerOrRefuse != 0 && reply.payment <= lowestOfferReceived) -> skip;
-			:: (reply.offerOrRefuse != 0 && reply.payment > lowestOfferReceived) ->
+			:: (reply.offerOrRefuse == 1 && lowestOfferReceived == -1) ->
+				lowestOfferReceived = reply.payment;
+				shuttleToOffer = reply.shuttleId;
+			:: (reply.offerOrRefuse == 1 && lowestOfferReceived != -1 && reply.payment >= lowestOfferReceived) -> skip;
+			:: (reply.offerOrRefuse == 1 && lowestOfferReceived != -1 && reply.payment < lowestOfferReceived) ->
 				lowestOfferReceived = reply.payment;
 				shuttleToOffer = reply.shuttleId;
 			fi;
@@ -185,18 +317,16 @@ proctype management() {
 		if 
 		:: (lowestOfferReceived == -1) -> skip;	// all shuttles refused
 		:: (lowestOfferReceived != -1) ->
-			assignmt.start = order.start;
-			assignmt.end = order.end;
-			assignmt.load = order.load;
-			assignmt.orderOrAssign = 1;
-			managementToShuttles[shuttleToOffer] ! assignmt;
+			order.orderOrAssign = 1;
+			managementToShuttles[shuttleToOffer] ! order;
+			lowestOfferReceived = -1;
 		fi;
 	od;
 }
 
 init {
 	run management();
-	run shuttle(1, 5, 1, 2);
-	run shuttle(2, 8, 1, 4);
-	run shuttle(3, 10, 2, 3);
+	run shuttle(0, 5, 1, 2);
+	run shuttle(1, 8, 1, 4);
+	run shuttle(2, 10, 2, 3);
 }
