@@ -1,0 +1,1614 @@
+Fname	PromelaModel.pml
+===start Model Spec===
+1	#define NUM_STATIONS	6
+2	#define ARRAY_SIZE		3
+3	#define NUM_SHUTTLES	3
+4	
+5	typedef orderType {
+6		int start;
+7		int end;
+8		int load;
+9		bool orderOrAssign;	// 0 for order, 1 for assign
+10	}
+11	
+12	typedef shuttleReply {
+13		int shuttleId;
+14		bool offerOrRefuse;	// 0 for refuse, 1 for offer
+15		int payment;
+16	}
+17	
+18	typedef track {
+19		int origin;
+20		int dest;
+21	}
+22	
+23	// keeps track of where each shuttle is -> if shuttle with id 1 is at station3, shuttlePos[1] will be (3,3)
+24	// if shuttle with id 1 is on track going from station1 to station2, shuttlePos[1] will be (1,2); 0th cell in array won't be used
+25	track shuttlePos[NUM_SHUTTLES+1];
+26	
+27	// keeps track of each track's availability -> 1st and 2nd cells of array are tracks 6->1 and 2->1, 3rd and 4th cells are tracks 1->2 and 3->2 etc...
+28	// 0th cell in array won't be used
+29	bool trackAvail[(NUM_STATIONS*2) + 1];
+30	
+31	chan managementToShuttles[NUM_SHUTTLES] = [ARRAY_SIZE] of {orderType};
+32	chan shuttlesToManagement = [ARRAY_SIZE] of {shuttleReply};
+33	
+34	proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
+35		orderType order;
+36		orderType ordersAssigned[ARRAY_SIZE];	// list of all orders shuttle has accepted and needs to execute but hasn't loaded yet
+37		orderType ordersBeingExecuted[ARRAY_SIZE];	// list of all orders shuttle is currently executing (transporting)
+38		int numOrdersAssigned = 0;
+39		int numOrdersBeingExecuted = 0;
+40		int currLoad = 0;
+41		int dummy;
+42		int dummy2;
+43		int nextDest1;
+44		int nextDest2;
+45		int difference1;
+46		int difference2;
+47	
+48		shuttlePos[shuttleId].origin = startStation;
+49		shuttlePos[shuttleId].dest = startStation;
+50	
+51		shuttleReply reply;
+52		reply.shuttleId = shuttleId;
+53		reply.payment = charge;
+54	
+55		do
+56		
+57		// When an order is received,
+58		:: managementToShuttles[shuttleId] ? order ->
+59			if 
+60	
+61			// a shuttle should make an offer only if (a) current loaded size plus the order size does not exceed
+62			// the capacity, and (b) the start destination of the order is within two stations away from its current position
+63			// (if it is on a track, its current position is its arriving station). Otherwise the shuttle should refuse to make an offer.
+64			:: (order.orderOrAssign == 0) ->
+65				if 
+66				:: (order.load + currLoad <= capacity) ->
+67					int difference = shuttlePos[shuttleId].dest - order.start;
+68					if
+69					:: (difference <= 2 && difference >= -2) ->
+70						reply.offerOrRefuse = 1;
+71					:: (difference > 2 || difference < -2) ->
+72						if
+73						:: (difference < 0 && (difference + NUM_STATIONS <= 2)) ->
+74							reply.offerOrRefuse = 1;
+75						:: (difference > 0 && (difference - NUM_STATIONS >= -2)) ->
+76							reply.offerOrRefuse = 1;
+77						:: else ->
+78							reply.offerOrRefuse = 0;
+79						fi;
+80					fi;				
+81				:: (order.load + currLoad > capacity) ->
+82					reply.offerOrRefuse = 0;
+83				fi;
+84				
+85				shuttlesToManagement ! reply;
+86			:: (order.orderOrAssign == 1) ->
+87				ordersAssigned[numOrdersAssigned].start = order.start;
+88				ordersAssigned[numOrdersAssigned].end = order.end;
+89				ordersAssigned[numOrdersAssigned].load = order.load;
+90				ordersAssigned[numOrdersAssigned].orderOrAssign = order.orderOrAssign;
+91				numOrdersAssigned = numOrdersAssigned + 1;
+92			fi;
+93		
+94		// Shuttle traveling on a track can neither change direction nor choose another destination.
+95		:: (shuttlePos[shuttleId].origin != shuttlePos[shuttleId].dest) ->
+96	
+97			// make track it was previously travelling on now available again
+98			if
+99			:: (shuttlePos[shuttleId].origin < shuttlePos[shuttleId].dest && shuttlePos[shuttleId].dest != NUM_SHUTTLES) ->
+100				trackAvail[(shuttlePos[shuttleId].dest * 2) - 1] = 1;
+101	
+102			:: (shuttlePos[shuttleId].origin < shuttlePos[shuttleId].dest && shuttlePos[shuttleId].dest == NUM_SHUTTLES) ->
+103				if 
+104				:: (shuttlePos[shuttleId].origin == 1) ->
+105					trackAvail[(shuttlePos[shuttleId].dest * 2)] = 1;
+106				:: (shuttlePos[shuttleId].origin != 1) ->
+107					trackAvail[(shuttlePos[shuttleId].dest * 2) - 1] = 1;
+108				fi;
+109	
+110			:: (shuttlePos[shuttleId].origin > shuttlePos[shuttleId].dest && shuttlePos[shuttleId].dest != 1) ->
+111				trackAvail[(shuttlePos[shuttleId].dest * 2)] = 1;
+112	
+113			:: (shuttlePos[shuttleId].origin > shuttlePos[shuttleId].dest && shuttlePos[shuttleId].dest == 1) ->
+114				if
+115				:: (shuttlePos[shuttleId].origin == NUM_SHUTTLES) ->
+116					trackAvail[(shuttlePos[shuttleId].dest * 2) - 1] = 1;
+117				:: (shuttlePos[shuttleId].origin != NUM_SHUTTLES) ->
+118					trackAvail[(shuttlePos[shuttleId].dest * 2)] = 1;
+119				fi;
+120			fi;
+121	
+122			shuttlePos[shuttleId].origin = shuttlePos[shuttleId].dest; 
+123				
+124		// Shuttle at station (not on track)
+125		:: (shuttlePos[shuttleId].origin == shuttlePos[shuttleId].dest) ->
+126			if
+127	
+128			// 1. NO ORDERS BEING EXECUTED, NO ORDERS ASSIGNED
+129			:: (numOrdersBeingExecuted == 0 && numOrdersAssigned == 0) ->
+130				skip;
+131	
+132			// 2. MOVE TO STATION TO LOAD ORDER (IF I AM NOT EXECUTING ANY ORDER BUT HAVE ORDERS ASSIGNED)
+133			:: (numOrdersBeingExecuted == 0 && numOrdersAssigned != 0 && shuttlePos[shuttleId].dest != ordersAssigned[0].start) ->
+134	
+135				// 2.1 find the next station to go to that would make the journey to the loading station the shortest
+136				nextDest1 = shuttlePos[shuttleId].dest + 1;
+137				if
+138				:: (nextDest1 > NUM_STATIONS) ->
+139					nextDest1 = 1;
+140				:: else -> skip;
+141				fi;
+142				nextDest2 = shuttlePos[shuttleId].dest - 1;
+143				if
+144				:: (nextDest2 == 0) ->
+145					nextDest2 = NUM_STATIONS;
+146				:: else -> skip;
+147				fi;
+148	
+149				difference1 = nextDest1 - ordersAssigned[0].start;
+150				if
+151				:: (-difference1 < (-NUM_STATIONS/2)) ->
+152					difference1 = difference1 + NUM_STATIONS;
+153				:: (difference1 > (NUM_STATIONS/2)) ->
+154					difference1 = difference1 - NUM_STATIONS;
+155				:: else -> skip;
+156				fi;
+157				if
+158				:: (difference1 < 0) ->
+159					difference1 = 0 - difference1;
+160				:: else -> skip;
+161				fi;
+162	
+163				difference2 = nextDest2 - ordersAssigned[0].start;
+164				if
+165				:: (-difference2 < (-NUM_STATIONS/2)) ->
+166					difference2 = difference2 + NUM_STATIONS;
+167				:: (difference2 > (NUM_STATIONS/2)) ->
+168					difference2 = difference2 + NUM_STATIONS;
+169				:: else -> skip;
+170				fi;
+171				if
+172				:: (difference2 < 0) ->
+173					difference2 = 0 - difference2;
+174				:: else -> skip;
+175				fi;
+176	
+177				// 2.2 go onto the track that leads to the station that would make the journey to the loading station shortest 
+178				// IF the track is available
+179				if
+180				:: (difference1 <= difference2) ->
+181					if
+182					:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 != NUM_SHUTTLES && trackAvail[(nextDest1 * 2) - 1] == 1) ->
+183						trackAvail[(nextDest1 * 2) - 1] = 0;
+184						shuttlePos[shuttleId].dest = nextDest1;
+185					
+186					:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 == NUM_SHUTTLES) ->
+187						if 
+188						:: (shuttlePos[shuttleId].origin == 1 && trackAvail[(nextDest1 * 2)] == 1) ->
+189							trackAvail[(nextDest1 * 2)] = 0;
+190							shuttlePos[shuttleId].dest = nextDest1;
+191						:: (shuttlePos[shuttleId].origin != 1 && trackAvail[(nextDest1 * 2) - 1] == 1) ->
+192							trackAvail[(nextDest1 * 2) - 1] = 0;
+193							shuttlePos[shuttleId].dest = nextDest1;
+194						:: else -> skip;
+195						fi;
+196					
+197					:: (shuttlePos[shuttleId].origin > nextDest1 && nextDest1 != 1 && trackAvail[(nextDest1 * 2)] == 1) ->
+198						trackAvail[(nextDest1 * 2)] = 0;
+199						shuttlePos[shuttleId].dest = nextDest1;
+200					
+201					:: (shuttlePos[shuttleId].origin > nextDest1 && nextDest1 == 1) ->
+202						if
+203						:: (shuttlePos[shuttleId].origin == NUM_SHUTTLES && trackAvail[(nextDest1 * 2) - 1] == 1) ->
+204							trackAvail[(nextDest1 * 2) - 1] = 0;
+205							shuttlePos[shuttleId].dest = nextDest1;
+206	
+207						:: (shuttlePos[shuttleId].origin != NUM_SHUTTLES && trackAvail[(nextDest1 * 2)] == 1) ->
+208							trackAvail[(nextDest1 * 2)] = 1;
+209							shuttlePos[shuttleId].dest = nextDest1;
+210							
+211						:: else -> skip;
+212						fi;
+213					
+214					:: else -> skip;
+215					fi;
+216					
+217				:: (difference1 > difference2) ->
+218					if
+219					:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 != NUM_SHUTTLES && trackAvail[(nextDest2 * 2) - 1] == 1) ->
+220						trackAvail[(nextDest2 * 2) - 1] = 0;
+221						shuttlePos[shuttleId].dest = nextDest2;
+222					
+223					:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 == NUM_SHUTTLES) ->
+224						if 
+225						:: (shuttlePos[shuttleId].origin == 1 && trackAvail[(nextDest2 * 2)] == 1) ->
+226							trackAvail[(nextDest2 * 2)] = 0;
+227							shuttlePos[shuttleId].dest = nextDest2;
+228						:: (shuttlePos[shuttleId].origin != 1 && trackAvail[(nextDest2 * 2) - 1] == 1) ->
+229							trackAvail[(nextDest2 * 2) - 1] = 0;
+230							shuttlePos[shuttleId].dest = nextDest2;
+231						:: else -> skip;
+232						fi;
+233					
+234					:: (shuttlePos[shuttleId].origin > nextDest2 && nextDest2 != 1 && trackAvail[(nextDest2 * 2)] == 1) ->
+235						trackAvail[(nextDest2 * 2)] = 0;
+236						shuttlePos[shuttleId].dest = nextDest2;
+237					
+238					:: (shuttlePos[shuttleId].origin > nextDest2 && nextDest2 == 1) ->
+239						if
+240						:: (shuttlePos[shuttleId].origin == NUM_SHUTTLES && trackAvail[(nextDest2 * 2) - 1] == 1) ->
+241							trackAvail[(nextDest2 * 2) - 1] = 0;
+242							shuttlePos[shuttleId].dest = nextDest2;
+243	
+244						:: (shuttlePos[shuttleId].origin != NUM_SHUTTLES && trackAvail[(nextDest2 * 2)] == 1) ->
+245							trackAvail[(nextDest2 * 2)] = 1;
+246							shuttlePos[shuttleId].dest = nextDest2;
+247							
+248						:: else -> skip;
+249						fi;
+250					
+251					:: else -> skip;
+252					fi;
+253				fi;
+254				
+255			// 3. LOAD ORDER (IF I AM NOT EXECUTING ANY ORDER BUT HAVE ORDERS ASSIGNED)
+256			:: (numOrdersBeingExecuted == 0 && numOrdersAssigned != 0 && shuttlePos[shuttleId].dest == ordersAssigned[0].start && ordersAssigned[0].load + currLoad <= capacity) ->			
+257				
+258				ordersBeingExecuted[numOrdersBeingExecuted].start = ordersAssigned[0].start;
+259				ordersBeingExecuted[numOrdersBeingExecuted].end = ordersAssigned[0].end;
+260				ordersBeingExecuted[numOrdersBeingExecuted].load = ordersAssigned[0].load;
+261				ordersBeingExecuted[numOrdersBeingExecuted].orderOrAssign = ordersAssigned[0].orderOrAssign;
+262				currLoad = currLoad + ordersBeingExecuted[0].load;
+263	
+264				numOrdersBeingExecuted = numOrdersBeingExecuted + 1;
+265				numOrdersAssigned = numOrdersAssigned - 1;
+266	
+267				dummy = numOrdersAssigned;
+268				dummy2 = 0;
+269	
+270				// 3.1 move all ordersAssigned one element forward to cover up the 1st order (that has been loaded and moved from ordersAssigned to ordersBeingExecuted)
+271				do
+272				:: (dummy != 0) ->
+273					ordersAssigned[dummy2].start = ordersAssigned[dummy2 + 1].start;
+274					ordersAssigned[dummy2].end = ordersAssigned[dummy2 + 1].end;
+275					ordersAssigned[dummy2].load = ordersAssigned[dummy2 + 1].load;
+276					ordersAssigned[dummy2].orderOrAssign = ordersAssigned[dummy2 + 1].orderOrAssign;
+277					dummy2 = dummy2 + 1;
+278					dummy = dummy - 1;
+279				
+280				:: (dummy == 0) ->
+281					ordersAssigned[numOrdersAssigned].start = 0;
+282					ordersAssigned[numOrdersAssigned].end = 0;
+283					ordersAssigned[numOrdersAssigned].load = 0;
+284					ordersAssigned[numOrdersAssigned].orderOrAssign = 0;
+285					break;
+286				od;
+287	
+288			// 4. MOVE TO STATION TO UNLOAD ORDER (IF I AM EXECUTING AN ORDER)
+289			:: (numOrdersBeingExecuted != 0 && shuttlePos[shuttleId].dest != ordersBeingExecuted[0].end) ->
+290				
+291				// 4.1 find the next station to go to that would make the journey to the unloading station the shortest
+292				nextDest1 = shuttlePos[shuttleId].dest + 1;
+293				if
+294				:: (nextDest1 > NUM_STATIONS) ->
+295					nextDest1 = 1;
+296				:: else -> skip;
+297				fi;
+298				nextDest2 = shuttlePos[shuttleId].dest - 1;
+299				if
+300				:: (nextDest2 == 0) ->
+301					nextDest2 = NUM_STATIONS;
+302				:: else -> skip;
+303				fi;
+304	
+305				difference1 = nextDest1 - ordersBeingExecuted[0].end;
+306				if
+307				:: (-difference1 < (-NUM_STATIONS/2)) ->
+308					difference1 = difference1 + NUM_STATIONS;
+309				:: (difference1 > (NUM_STATIONS/2)) ->
+310					difference1 = difference1 - NUM_STATIONS;
+311				:: else -> skip;
+312				fi;
+313				if
+314				:: (difference1 < 0) ->
+315					difference1 = 0 - difference1;
+316				:: else -> skip;
+317				fi;
+318	
+319				difference2 = nextDest2 - ordersBeingExecuted[0].end;
+320				if
+321				:: (-difference2 < (-NUM_STATIONS/2)) ->
+322					difference2 = difference2 + NUM_STATIONS;
+323				:: (difference2 > (NUM_STATIONS/2)) ->
+324					difference2 = difference2 + NUM_STATIONS;
+325				:: else -> skip;
+326				fi;
+327				if
+328				:: (difference2 < 0) ->
+329					difference2 = 0 - difference2;
+330				:: else -> skip;
+331				fi;
+332	
+333				// 4.2 go onto the track that leads to the station that would make the journey to the unloading station shortest 
+334				// IF the track is available
+335				if
+336				:: (difference1 <= difference2) ->
+337					if
+338					:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 != NUM_SHUTTLES && trackAvail[(nextDest1 * 2) - 1] == 1) ->
+339						trackAvail[(nextDest1 * 2) - 1] = 0;
+340						shuttlePos[shuttleId].dest = nextDest1;
+341					
+342					:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 == NUM_SHUTTLES) ->
+343						if 
+344						:: (shuttlePos[shuttleId].origin == 1 && trackAvail[(nextDest1 * 2)] == 1) ->
+345							trackAvail[(nextDest1 * 2)] = 0;
+346							shuttlePos[shuttleId].dest = nextDest1;
+347						:: (shuttlePos[shuttleId].origin != 1 && trackAvail[(nextDest1 * 2) - 1] == 1) ->
+348							trackAvail[(nextDest1 * 2) - 1] = 0;
+349							shuttlePos[shuttleId].dest = nextDest1;
+350						:: else -> skip;
+351						fi;
+352					
+353					:: (shuttlePos[shuttleId].origin > nextDest1 && nextDest1 != 1 && trackAvail[(nextDest1 * 2)] == 1) ->
+354						trackAvail[(nextDest1 * 2)] = 0;
+355						shuttlePos[shuttleId].dest = nextDest1;
+356					
+357					:: (shuttlePos[shuttleId].origin > nextDest1 && nextDest1 == 1) ->
+358						if
+359						:: (shuttlePos[shuttleId].origin == NUM_SHUTTLES && trackAvail[(nextDest1 * 2) - 1] == 1) ->
+360							trackAvail[(nextDest1 * 2) - 1] = 0;
+361							shuttlePos[shuttleId].dest = nextDest1;
+362	
+363						:: (shuttlePos[shuttleId].origin != NUM_SHUTTLES && trackAvail[(nextDest1 * 2)] == 1) ->
+364							trackAvail[(nextDest1 * 2)] = 1;
+365							shuttlePos[shuttleId].dest = nextDest1;
+366							
+367						:: else -> skip;
+368						fi;
+369					
+370					:: else -> skip;
+371					fi;
+372					
+373				:: (difference1 > difference2) ->
+374					if
+375					:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 != NUM_SHUTTLES && trackAvail[(nextDest2 * 2) - 1] == 1) ->
+376						trackAvail[(nextDest2 * 2) - 1] = 0;
+377						shuttlePos[shuttleId].dest = nextDest2;
+378					
+379					:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 == NUM_SHUTTLES) ->
+380						if 
+381						:: (shuttlePos[shuttleId].origin == 1 && trackAvail[(nextDest2 * 2)] == 1) ->
+382							trackAvail[(nextDest2 * 2)] = 0;
+383							shuttlePos[shuttleId].dest = nextDest2;
+384						:: (shuttlePos[shuttleId].origin != 1 && trackAvail[(nextDest2 * 2) - 1] == 1) ->
+385							trackAvail[(nextDest2 * 2) - 1] = 0;
+386							shuttlePos[shuttleId].dest = nextDest2;
+387						:: else -> skip;
+388						fi;
+389					
+390					:: (shuttlePos[shuttleId].origin > nextDest2 && nextDest2 != 1 && trackAvail[(nextDest2 * 2)] == 1) ->
+391						trackAvail[(nextDest2 * 2)] = 0;
+392						shuttlePos[shuttleId].dest = nextDest2;
+393					
+394					:: (shuttlePos[shuttleId].origin > nextDest2 && nextDest2 == 1) ->
+395						if
+396						:: (shuttlePos[shuttleId].origin == NUM_SHUTTLES && trackAvail[(nextDest2 * 2) - 1] == 1) ->
+397							trackAvail[(nextDest2 * 2) - 1] = 0;
+398							shuttlePos[shuttleId].dest = nextDest2;
+399	
+400						:: (shuttlePos[shuttleId].origin != NUM_SHUTTLES && trackAvail[(nextDest2 * 2)] == 1) ->
+401							trackAvail[(nextDest2 * 2)] = 1;
+402							shuttlePos[shuttleId].dest = nextDest2;
+403							
+404						:: else -> skip;
+405						fi;
+406					
+407					:: else -> skip;
+408					fi;
+409				fi;
+410			
+411			// 5. UNLOAD ORDER (IF I AM EXECUTING AN ORDER) 
+412			:: (numOrdersBeingExecuted != 0 && shuttlePos[shuttleId].dest == ordersBeingExecuted[0].end) ->
+413				numOrdersBeingExecuted = numOrdersBeingExecuted - 1;
+414				currLoad = currLoad - ordersBeingExecuted[0].load;
+415	
+416				dummy = numOrdersBeingExecuted;
+417				dummy2 = 0;
+418	
+419				// 5.1 move all ordersBeingExecuted one element forward to cover up the 1st order (that has been unloaded and should be removed from ordersBeingExecuted)
+420				do
+421				:: (dummy != 0) ->
+422					ordersBeingExecuted[dummy2].start = ordersBeingExecuted[dummy2 + 1].start;
+423					ordersBeingExecuted[dummy2].end = ordersBeingExecuted[dummy2 + 1].end;
+424					ordersBeingExecuted[dummy2].load = ordersBeingExecuted[dummy2 + 1].load;
+425					ordersBeingExecuted[dummy2].orderOrAssign = ordersBeingExecuted[dummy2 + 1].orderOrAssign;
+426					dummy2 = dummy2 + 1;
+427					dummy = dummy - 1;
+428				
+429				:: (dummy == 0) ->
+430					ordersBeingExecuted[numOrdersBeingExecuted].start = 0;
+431					ordersBeingExecuted[numOrdersBeingExecuted].end = 0;
+432					ordersBeingExecuted[numOrdersBeingExecuted].load = 0;
+433					ordersBeingExecuted[numOrdersBeingExecuted].orderOrAssign = 0;
+434					break;
+435				od;
+436			fi;
+437		od;
+438	}
+439	
+440	proctype management() {
+441		orderType orders[ARRAY_SIZE];
+442		orderType order;
+443		int lowestOfferReceived = -1;
+444		int shuttleToOffer = 0;
+445		int numShuttlesReplied = 0;
+446		int numShuttlesSent = 0;
+447		shuttleReply reply;
+448		int dummy = 0;
+449		int NUM_ORDERS = 2;
+450	
+451		orders[0].start = 1;
+452		orders[0].end = 3;
+453		orders[0].load = 4;
+454		orders[0].orderOrAssign = 0;
+455		orders[1].start = 2;
+456		orders[1].end = 3;
+457		orders[1].load = 1;
+458		orders[1].orderOrAssign = 0;
+459	
+460		// initialise trackAvail array
+461		do
+462		:: (dummy != (NUM_STATIONS*2)+1) ->
+463			trackAvail[dummy] = 1;
+464			dummy = dummy + 1;
+465		:: (dummy == (NUM_STATIONS*2)+1) ->
+466			dummy = 0;
+467			break;
+468		od;
+469	
+470		do
+471		:: (dummy == NUM_ORDERS) ->
+472			break;
+473		:: (dummy != NUM_ORDERS) ->
+474			order.start = orders[dummy].start;
+475			order.end = orders[dummy].end;
+476			order.load = orders[dummy].load;
+477			order.orderOrAssign = orders[dummy].orderOrAssign;
+478			dummy = dummy + 1;
+479	
+480			// Orders are made known to all shuttles by the management system.
+481			do
+482			:: managementToShuttles[numShuttlesSent] ! order ->
+483				numShuttlesSent = numShuttlesSent + 1;
+484				if 
+485				:: (numShuttlesSent == NUM_SHUTTLES) ->
+486					numShuttlesSent = 0;
+487					break;
+488				:: (numShuttlesSent != NUM_SHUTTLES) ->
+489					skip;
+490				fi;
+491			od;
+492	
+493			// After all shuttles are informed of the new order, each shuttle must reply with either an offer or refuse message.
+494			// The shuttle having made the lowest offer will receive the assignment. In the event of two equal offers, the assignment will
+495			// go to the shuttle that first made the offer.
+496			do
+497			:: shuttlesToManagement ? reply ->
+498				numShuttlesReplied = numShuttlesReplied + 1;
+499				if 
+500				:: (reply.offerOrRefuse == 0) -> skip;
+501				:: (reply.offerOrRefuse == 1 && lowestOfferReceived == -1) ->
+502					lowestOfferReceived = reply.payment;
+503					shuttleToOffer = reply.shuttleId;
+504				:: (reply.offerOrRefuse == 1 && lowestOfferReceived != -1 && reply.payment >= lowestOfferReceived) -> skip;
+505				:: (reply.offerOrRefuse == 1 && lowestOfferReceived != -1 && reply.payment < lowestOfferReceived) ->
+506					lowestOfferReceived = reply.payment;
+507					shuttleToOffer = reply.shuttleId;
+508				fi;
+509				
+510				if 
+511				:: (numShuttlesReplied == NUM_SHUTTLES) ->
+512					numShuttlesReplied = 0;
+513					break;
+514				:: (numShuttlesReplied != NUM_SHUTTLES) -> skip;
+515				fi;
+516			od;
+517	
+518			if 
+519			:: (lowestOfferReceived == -1) -> skip;	// all shuttles refused
+520			:: (lowestOfferReceived != -1) ->
+521				order.orderOrAssign = 1;
+522				managementToShuttles[shuttleToOffer] ! order;
+523				lowestOfferReceived = -1;
+524			fi;
+525		od;
+526	}
+527	
+528	init {
+529		run management();
+530		run shuttle(0, 5, 1, 2);
+531		run shuttle(1, 8, 1, 4);
+532		run shuttle(2, 10, 2, 3);
+533	}
+
+
+===end Model Spec===
+===start Model Log===
+Spin Version 6.5.0 -- 1 July 2019
+iSpin Version 1.1.4 -- 27 November 2014
+TclTk Version 8.6/8.6
+1 C:/Users/Brandon/Desktop/Brandon/Uni/Sem5/CS4211/Assignment/A0172029J/assignment1/Question 2/PromelaModel.pml:1
+2 syntax check
+spin: nothing to report
+3 simulate/replay
+4 C:/Users/Brandon/Desktop/Brandon/Uni/Sem5/CS4211/Assignment/A0172029J/assignment1/Question 2/PromelaModel.pml:1
+5 syntax check
+spin: nothing to report
+6 simulate/replay
+7 C:/Users/Brandon/Desktop/Brandon/Uni/Sem5/CS4211/Assignment/A0172029J/assignment1/Question 2/PromelaModel.pml:1
+8 syntax check
+spin: nothing to report
+9 simulate/replay
+
+
+===end Model Log===
+Seed	123
+Trail	PromelaModel.pml.trail
+SkipStep	0
+MaxStep	10000
+VarVals	1
+FullQ	0
+MSC_Full	0
+MaxText	20
+Delay	25
+Pids	
+Qids	
+Vars	
+Track	
+Scale	
+===start Data===
+[variable values, step 404]
+
+ management(1):dummy  =  2
+ management(1):lowestOfferReceived  =  -1
+ management(1):numShuttlesReplied  =  0
+ management(1):numShuttlesSent  =  0
+ management(1):order.end  =  3
+ management(1):order.load  =  1
+ management(1):order.orderOrAssign  =  1
+ management(1):order.start  =  2
+ management(1):orders[0].end  =  3
+ management(1):orders[0].load  =  4
+ management(1):orders[0].orderOrAssign  =  0
+ management(1):orders[0].start  =  1
+ management(1):orders[1].end  =  3
+ management(1):orders[1].load  =  1
+ management(1):orders[1].orderOrAssign  =  0
+ management(1):orders[1].start  =  2
+ management(1):orders[2].end  =  0
+ management(1):orders[2].load  =  0
+ management(1):orders[2].orderOrAssign  =  0
+ management(1):orders[2].start  =  0
+ management(1):reply.offerOrRefuse  =  1
+ management(1):reply.payment  =  2
+ management(1):reply.shuttleId  =  0
+ management(1):shuttleToOffer  =  0
+ shuttle(2):currLoad  =  0
+ shuttle(2):difference  =  0
+ shuttle(2):difference1  =  0
+ shuttle(2):difference2  =  2
+ shuttle(2):dummy  =  0
+ shuttle(2):dummy2  =  0
+ shuttle(2):nextDest1  =  3
+ shuttle(2):nextDest2  =  1
+ shuttle(2):numOrdersAssigned  =  0
+ shuttle(2):numOrdersBeingExecuted  =  0
+ shuttle(2):order.end  =  3
+ shuttle(2):order.load  =  1
+ shuttle(2):order.orderOrAssign  =  1
+ shuttle(2):order.start  =  2
+ shuttle(2):ordersAssigned[0].end  =  0
+ shuttle(2):ordersAssigned[0].load  =  0
+ shuttle(2):ordersAssigned[0].orderOrAssign  =  0
+ shuttle(2):ordersAssigned[0].start  =  0
+ shuttle(2):ordersAssigned[1].end  =  0
+ shuttle(2):ordersAssigned[1].load  =  0
+ shuttle(2):ordersAssigned[1].orderOrAssign  =  0
+ shuttle(2):ordersAssigned[1].start  =  0
+ shuttle(2):ordersAssigned[2].end  =  0
+ shuttle(2):ordersAssigned[2].load  =  0
+ shuttle(2):ordersAssigned[2].orderOrAssign  =  0
+ shuttle(2):ordersAssigned[2].start  =  0
+ shuttle(2):ordersBeingExecuted[0].end  =  0
+ shuttle(2):ordersBeingExecuted[0].load  =  0
+ shuttle(2):ordersBeingExecuted[0].orderOrAssign  =  0
+ shuttle(2):ordersBeingExecuted[0].start  =  0
+ shuttle(2):ordersBeingExecuted[1].end  =  0
+ shuttle(2):ordersBeingExecuted[1].load  =  0
+ shuttle(2):ordersBeingExecuted[1].orderOrAssign  =  0
+ shuttle(2):ordersBeingExecuted[1].start  =  0
+ shuttle(2):ordersBeingExecuted[2].end  =  0
+ shuttle(2):ordersBeingExecuted[2].load  =  0
+ shuttle(2):ordersBeingExecuted[2].orderOrAssign  =  0
+ shuttle(2):ordersBeingExecuted[2].start  =  0
+ shuttle(2):reply.offerOrRefuse  =  1
+ shuttle(2):reply.payment  =  2
+ shuttle(2):reply.shuttleId  =  0
+ shuttle(3):difference  =  -1
+ shuttle(3):order.end  =  3
+ shuttle(3):order.load  =  1
+ shuttle(3):order.orderOrAssign  =  0
+ shuttle(3):order.start  =  2
+ shuttle(3):ordersAssigned[0].end  =  0
+ shuttle(3):ordersAssigned[0].load  =  0
+ shuttle(3):ordersAssigned[0].orderOrAssign  =  0
+ shuttle(3):ordersAssigned[0].start  =  0
+ shuttle(3):ordersAssigned[1].end  =  0
+ shuttle(3):ordersAssigned[1].load  =  0
+ shuttle(3):ordersAssigned[1].orderOrAssign  =  0
+ shuttle(3):ordersAssigned[1].start  =  0
+ shuttle(3):ordersAssigned[2].end  =  0
+ shuttle(3):ordersAssigned[2].load  =  0
+ shuttle(3):ordersAssigned[2].orderOrAssign  =  0
+ shuttle(3):ordersAssigned[2].start  =  0
+ shuttle(3):ordersBeingExecuted[0].end  =  0
+ shuttle(3):ordersBeingExecuted[0].load  =  0
+ shuttle(3):ordersBeingExecuted[0].orderOrAssign  =  0
+ shuttle(3):ordersBeingExecuted[0].start  =  0
+ shuttle(3):ordersBeingExecuted[1].end  =  0
+ shuttle(3):ordersBeingExecuted[1].load  =  0
+ shuttle(3):ordersBeingExecuted[1].orderOrAssign  =  0
+ shuttle(3):ordersBeingExecuted[1].start  =  0
+ shuttle(3):ordersBeingExecuted[2].end  =  0
+ shuttle(3):ordersBeingExecuted[2].load  =  0
+ shuttle(3):ordersBeingExecuted[2].orderOrAssign  =  0
+ shuttle(3):ordersBeingExecuted[2].start  =  0
+ shuttle(3):reply.offerOrRefuse  =  1
+ shuttle(3):reply.payment  =  4
+ shuttle(3):reply.shuttleId  =  1
+ shuttle(4):difference  =  0
+ shuttle(4):order.end  =  3
+ shuttle(4):order.load  =  1
+ shuttle(4):order.orderOrAssign  =  0
+ shuttle(4):order.start  =  2
+ shuttle(4):ordersAssigned[0].end  =  0
+ shuttle(4):ordersAssigned[0].load  =  0
+ shuttle(4):ordersAssigned[0].orderOrAssign  =  0
+ shuttle(4):ordersAssigned[0].start  =  0
+ shuttle(4):ordersAssigned[1].end  =  0
+ shuttle(4):ordersAssigned[1].load  =  0
+ shuttle(4):ordersAssigned[1].orderOrAssign  =  0
+ shuttle(4):ordersAssigned[1].start  =  0
+ shuttle(4):ordersAssigned[2].end  =  0
+ shuttle(4):ordersAssigned[2].load  =  0
+ shuttle(4):ordersAssigned[2].orderOrAssign  =  0
+ shuttle(4):ordersAssigned[2].start  =  0
+ shuttle(4):ordersBeingExecuted[0].end  =  0
+ shuttle(4):ordersBeingExecuted[0].load  =  0
+ shuttle(4):ordersBeingExecuted[0].orderOrAssign  =  0
+ shuttle(4):ordersBeingExecuted[0].start  =  0
+ shuttle(4):ordersBeingExecuted[1].end  =  0
+ shuttle(4):ordersBeingExecuted[1].load  =  0
+ shuttle(4):ordersBeingExecuted[1].orderOrAssign  =  0
+ shuttle(4):ordersBeingExecuted[1].start  =  0
+ shuttle(4):ordersBeingExecuted[2].end  =  0
+ shuttle(4):ordersBeingExecuted[2].load  =  0
+ shuttle(4):ordersBeingExecuted[2].orderOrAssign  =  0
+ shuttle(4):ordersBeingExecuted[2].start  =  0
+ shuttle(4):reply.offerOrRefuse  =  1
+ shuttle(4):reply.payment  =  3
+ shuttle(4):reply.shuttleId  =  2
+ trackAvail[0]  =  1
+ trackAvail[10]  =  1
+ trackAvail[11]  =  1
+ trackAvail[12]  =  1
+ trackAvail[1]  =  1
+ trackAvail[2]  =  1
+ trackAvail[3]  =  1
+ trackAvail[4]  =  1
+ trackAvail[5]  =  1
+ trackAvail[6]  =  1
+ trackAvail[7]  =  1
+ trackAvail[8]  =  1
+ trackAvail[9]  =  1
+
+
+===end Data===
+===start Sim===
+  0:	proc  - (:root:) creates proc  0 (:init:)
+Starting management with pid 1
+  1:	proc  0 (:init::1) creates proc  1 (management)
+  1:	proc  0 (:init::1) PromelaModel.pml:529 (state 1)	[(run management())]
+Selected: 2
+Starting shuttle with pid 2
+  2:	proc  0 (:init::1) creates proc  2 (shuttle)
+  2:	proc  0 (:init::1) PromelaModel.pml:530 (state 2)	[(run shuttle(0,5,1,2))]
+Selected: 3
+Starting shuttle with pid 3
+  3:	proc  0 (:init::1) creates proc  3 (shuttle)
+  3:	proc  0 (:init::1) PromelaModel.pml:531 (state 3)	[(run shuttle(1,8,1,4))]
+Selected: 4
+Starting shuttle with pid 4
+  4:	proc  0 (:init::1) creates proc  4 (shuttle)
+  4:	proc  0 (:init::1) PromelaModel.pml:532 (state 4)	[(run shuttle(2,10,2,3))]
+Selected: 1
+  5:	proc  4 (shuttle:1) PromelaModel.pml:48 (state 1)	[shuttlePos[shuttleId].origin = startStation]
+Selected: 1
+  6:	proc  4 (shuttle:1) PromelaModel.pml:49 (state 2)	[shuttlePos[shuttleId].dest = startStation]
+Selected: 1
+  7:	proc  4 (shuttle:1) PromelaModel.pml:52 (state 3)	[]
+Selected: 1
+  8:	proc  4 (shuttle:1) PromelaModel.pml:52 (state 4)	[reply.shuttleId = shuttleId]
+Selected: 1
+  9:	proc  4 (shuttle:1) PromelaModel.pml:53 (state 5)	[reply.payment = charge]
+Selected: 3
+ 10:	proc  4 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 1
+ 11:	proc  4 (shuttle:1) PromelaModel.pml:129 (state 59)	[(((numOrdersBeingExecuted==0)&&(numOrdersAssigned==0)))]
+Selected: 1
+ 12:	proc  4 (shuttle:1) PromelaModel.pml:130 (state 60)	[(1)]
+Selected: 4
+ 13:	proc  3 (shuttle:1) PromelaModel.pml:48 (state 1)	[shuttlePos[shuttleId].origin = startStation]
+Selected: 4
+ 14:	proc  3 (shuttle:1) PromelaModel.pml:49 (state 2)	[shuttlePos[shuttleId].dest = startStation]
+Selected: 4
+ 15:	proc  3 (shuttle:1) PromelaModel.pml:52 (state 3)	[]
+Selected: 4
+ 16:	proc  3 (shuttle:1) PromelaModel.pml:52 (state 4)	[reply.shuttleId = shuttleId]
+Selected: 4
+ 17:	proc  3 (shuttle:1) PromelaModel.pml:53 (state 5)	[reply.payment = charge]
+Selected: 6
+ 18:	proc  3 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 4
+ 19:	proc  3 (shuttle:1) PromelaModel.pml:129 (state 59)	[(((numOrdersBeingExecuted==0)&&(numOrdersAssigned==0)))]
+Selected: 4
+ 20:	proc  3 (shuttle:1) PromelaModel.pml:130 (state 60)	[(1)]
+Selected: 7
+ 21:	proc  2 (shuttle:1) PromelaModel.pml:48 (state 1)	[shuttlePos[shuttleId].origin = startStation]
+Selected: 7
+ 22:	proc  2 (shuttle:1) PromelaModel.pml:49 (state 2)	[shuttlePos[shuttleId].dest = startStation]
+Selected: 7
+ 23:	proc  2 (shuttle:1) PromelaModel.pml:52 (state 3)	[]
+Selected: 7
+ 24:	proc  2 (shuttle:1) PromelaModel.pml:52 (state 4)	[reply.shuttleId = shuttleId]
+Selected: 7
+ 25:	proc  2 (shuttle:1) PromelaModel.pml:53 (state 5)	[reply.payment = charge]
+Selected: 9
+ 26:	proc  2 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 7
+ 27:	proc  2 (shuttle:1) PromelaModel.pml:129 (state 59)	[(((numOrdersBeingExecuted==0)&&(numOrdersAssigned==0)))]
+Selected: 7
+ 28:	proc  2 (shuttle:1) PromelaModel.pml:130 (state 60)	[(1)]
+Selected: 10
+ 29:	proc  1 (management:1) PromelaModel.pml:451 (state 1)	[orders[0].start = 1]
+Selected: 10
+ 30:	proc  1 (management:1) PromelaModel.pml:452 (state 2)	[orders[0].end = 3]
+Selected: 10
+ 31:	proc  1 (management:1) PromelaModel.pml:453 (state 3)	[orders[0].load = 4]
+Selected: 10
+ 32:	proc  1 (management:1) PromelaModel.pml:454 (state 4)	[orders[0].orderOrAssign = 0]
+Selected: 10
+ 33:	proc  1 (management:1) PromelaModel.pml:455 (state 5)	[orders[1].start = 2]
+Selected: 10
+ 34:	proc  1 (management:1) PromelaModel.pml:456 (state 6)	[orders[1].end = 3]
+Selected: 10
+ 35:	proc  1 (management:1) PromelaModel.pml:457 (state 7)	[orders[1].load = 1]
+Selected: 10
+ 36:	proc  1 (management:1) PromelaModel.pml:458 (state 8)	[orders[1].orderOrAssign = 0]
+Selected: 10
+ 37:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 38:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 39:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 40:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 41:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 42:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 43:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 44:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 45:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 46:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 47:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 48:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 49:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 50:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 51:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 52:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 53:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 54:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 55:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 56:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 57:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 58:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 59:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 60:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 61:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 62:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 63:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 64:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 65:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 66:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 67:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 68:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 69:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 70:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 71:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 72:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 10
+ 73:	proc  1 (management:1) PromelaModel.pml:462 (state 9)	[((dummy!=((6*2)+1)))]
+Selected: 10
+ 74:	proc  1 (management:1) PromelaModel.pml:463 (state 10)	[trackAvail[dummy] = 1]
+Selected: 10
+ 75:	proc  1 (management:1) PromelaModel.pml:464 (state 11)	[dummy = (dummy+1)]
+Selected: 11
+ 76:	proc  1 (management:1) PromelaModel.pml:465 (state 12)	[((dummy==((6*2)+1)))]
+Selected: 10
+ 77:	proc  1 (management:1) PromelaModel.pml:466 (state 13)	[dummy = 0]
+Selected: 10
+ 78:	proc  1 (management:1) PromelaModel.pml:461 (state 17)	[break]
+Selected: 11
+ 79:	proc  1 (management:1) PromelaModel.pml:473 (state 20)	[((dummy!=NUM_ORDERS))]
+Selected: 10
+ 80:	proc  1 (management:1) PromelaModel.pml:474 (state 21)	[order.start = orders[dummy].start]
+Selected: 10
+ 81:	proc  1 (management:1) PromelaModel.pml:475 (state 22)	[order.end = orders[dummy].end]
+Selected: 10
+ 82:	proc  1 (management:1) PromelaModel.pml:476 (state 23)	[order.load = orders[dummy].load]
+Selected: 10
+ 83:	proc  1 (management:1) PromelaModel.pml:477 (state 24)	[order.orderOrAssign = orders[dummy].orderOrAssign]
+Selected: 10
+ 84:	proc  1 (management:1) PromelaModel.pml:478 (state 25)	[dummy = (dummy+1)]
+Selected: 10
+ 85:	proc  1 (management:1) PromelaModel.pml:482 (state 26)	[managementToShuttles[numShuttlesSent]!order.start,order.end,order.load,order.orderOrAssign]
+Selected: 10
+ 86:	proc  1 (management:1) PromelaModel.pml:483 (state 27)	[numShuttlesSent = (numShuttlesSent+1)]
+Selected: 11
+ 87:	proc  1 (management:1) PromelaModel.pml:488 (state 31)	[((numShuttlesSent!=3))]
+Selected: 10
+ 88:	proc  1 (management:1) PromelaModel.pml:489 (state 32)	[(1)]
+Selected: 10
+ 89:	proc  1 (management:1) PromelaModel.pml:482 (state 26)	[managementToShuttles[numShuttlesSent]!order.start,order.end,order.load,order.orderOrAssign]
+Selected: 10
+ 90:	proc  1 (management:1) PromelaModel.pml:483 (state 27)	[numShuttlesSent = (numShuttlesSent+1)]
+Selected: 11
+ 91:	proc  1 (management:1) PromelaModel.pml:488 (state 31)	[((numShuttlesSent!=3))]
+Selected: 10
+ 92:	proc  1 (management:1) PromelaModel.pml:489 (state 32)	[(1)]
+Selected: 10
+ 93:	proc  1 (management:1) PromelaModel.pml:482 (state 26)	[managementToShuttles[numShuttlesSent]!order.start,order.end,order.load,order.orderOrAssign]
+Selected: 10
+ 94:	proc  1 (management:1) PromelaModel.pml:483 (state 27)	[numShuttlesSent = (numShuttlesSent+1)]
+Selected: 10
+ 95:	proc  1 (management:1) PromelaModel.pml:485 (state 28)	[((numShuttlesSent==3))]
+Selected: 10
+ 96:	proc  1 (management:1) PromelaModel.pml:486 (state 29)	[numShuttlesSent = 0]
+Selected: 10
+ 97:	proc  1 (management:1) PromelaModel.pml:481 (state 37)	[break]
+Selected: 1
+ 98:	proc  4 (shuttle:1) PromelaModel.pml:58 (state 6)	[managementToShuttles[shuttleId]?order.start,order.end,order.load,order.orderOrAssign]
+Selected: 1
+ 99:	proc  4 (shuttle:1) PromelaModel.pml:64 (state 7)	[((order.orderOrAssign==0))]
+Selected: 1
+100:	proc  4 (shuttle:1) PromelaModel.pml:66 (state 8)	[(((order.load+currLoad)<=capacity))]
+Selected: 1
+101:	proc  4 (shuttle:1) PromelaModel.pml:68 (state 9)	[difference = (shuttlePos[shuttleId].dest-order.start)]
+Selected: 1
+102:	proc  4 (shuttle:1) PromelaModel.pml:69 (state 10)	[(((difference<=2)&&(difference>=-(2))))]
+Selected: 1
+103:	proc  4 (shuttle:1) PromelaModel.pml:70 (state 11)	[reply.offerOrRefuse = 1]
+Selected: 1
+104:	proc  4 (shuttle:1) PromelaModel.pml:85 (state 27)	[shuttlesToManagement!reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+105:	proc  1 (management:1) PromelaModel.pml:497 (state 38)	[shuttlesToManagement?reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+106:	proc  1 (management:1) PromelaModel.pml:498 (state 39)	[numShuttlesReplied = (numShuttlesReplied+1)]
+Selected: 11
+107:	proc  1 (management:1) PromelaModel.pml:501 (state 42)	[(((reply.offerOrRefuse==1)&&(lowestOfferReceived==-(1))))]
+Selected: 10
+108:	proc  1 (management:1) PromelaModel.pml:502 (state 43)	[lowestOfferReceived = reply.payment]
+Selected: 10
+109:	proc  1 (management:1) PromelaModel.pml:503 (state 44)	[shuttleToOffer = reply.shuttleId]
+Selected: 11
+110:	proc  1 (management:1) PromelaModel.pml:514 (state 55)	[((numShuttlesReplied!=3))]
+Selected: 10
+111:	proc  1 (management:1) PromelaModel.pml:514 (state 56)	[(1)]
+Selected: 4
+112:	proc  3 (shuttle:1) PromelaModel.pml:58 (state 6)	[managementToShuttles[shuttleId]?order.start,order.end,order.load,order.orderOrAssign]
+Selected: 4
+113:	proc  3 (shuttle:1) PromelaModel.pml:64 (state 7)	[((order.orderOrAssign==0))]
+Selected: 4
+114:	proc  3 (shuttle:1) PromelaModel.pml:66 (state 8)	[(((order.load+currLoad)<=capacity))]
+Selected: 4
+115:	proc  3 (shuttle:1) PromelaModel.pml:68 (state 9)	[difference = (shuttlePos[shuttleId].dest-order.start)]
+Selected: 4
+116:	proc  3 (shuttle:1) PromelaModel.pml:69 (state 10)	[(((difference<=2)&&(difference>=-(2))))]
+Selected: 4
+117:	proc  3 (shuttle:1) PromelaModel.pml:70 (state 11)	[reply.offerOrRefuse = 1]
+Selected: 4
+118:	proc  3 (shuttle:1) PromelaModel.pml:85 (state 27)	[shuttlesToManagement!reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+119:	proc  1 (management:1) PromelaModel.pml:497 (state 38)	[shuttlesToManagement?reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+120:	proc  1 (management:1) PromelaModel.pml:498 (state 39)	[numShuttlesReplied = (numShuttlesReplied+1)]
+Selected: 12
+121:	proc  1 (management:1) PromelaModel.pml:504 (state 45)	[((((reply.offerOrRefuse==1)&&(lowestOfferReceived!=-(1)))&&(reply.payment>=lowestOfferReceived)))]
+Selected: 10
+122:	proc  1 (management:1) PromelaModel.pml:504 (state 46)	[(1)]
+Selected: 11
+123:	proc  1 (management:1) PromelaModel.pml:514 (state 55)	[((numShuttlesReplied!=3))]
+Selected: 10
+124:	proc  1 (management:1) PromelaModel.pml:514 (state 56)	[(1)]
+Selected: 7
+125:	proc  2 (shuttle:1) PromelaModel.pml:58 (state 6)	[managementToShuttles[shuttleId]?order.start,order.end,order.load,order.orderOrAssign]
+Selected: 7
+126:	proc  2 (shuttle:1) PromelaModel.pml:64 (state 7)	[((order.orderOrAssign==0))]
+Selected: 7
+127:	proc  2 (shuttle:1) PromelaModel.pml:66 (state 8)	[(((order.load+currLoad)<=capacity))]
+Selected: 7
+128:	proc  2 (shuttle:1) PromelaModel.pml:68 (state 9)	[difference = (shuttlePos[shuttleId].dest-order.start)]
+Selected: 7
+129:	proc  2 (shuttle:1) PromelaModel.pml:69 (state 10)	[(((difference<=2)&&(difference>=-(2))))]
+Selected: 7
+130:	proc  2 (shuttle:1) PromelaModel.pml:70 (state 11)	[reply.offerOrRefuse = 1]
+Selected: 7
+131:	proc  2 (shuttle:1) PromelaModel.pml:85 (state 27)	[shuttlesToManagement!reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+132:	proc  1 (management:1) PromelaModel.pml:497 (state 38)	[shuttlesToManagement?reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+133:	proc  1 (management:1) PromelaModel.pml:498 (state 39)	[numShuttlesReplied = (numShuttlesReplied+1)]
+Selected: 13
+134:	proc  1 (management:1) PromelaModel.pml:505 (state 47)	[((((reply.offerOrRefuse==1)&&(lowestOfferReceived!=-(1)))&&(reply.payment<lowestOfferReceived)))]
+Selected: 10
+135:	proc  1 (management:1) PromelaModel.pml:506 (state 48)	[lowestOfferReceived = reply.payment]
+Selected: 10
+136:	proc  1 (management:1) PromelaModel.pml:507 (state 49)	[shuttleToOffer = reply.shuttleId]
+Selected: 10
+137:	proc  1 (management:1) PromelaModel.pml:511 (state 52)	[((numShuttlesReplied==3))]
+Selected: 10
+138:	proc  1 (management:1) PromelaModel.pml:512 (state 53)	[numShuttlesReplied = 0]
+Selected: 10
+139:	proc  1 (management:1) PromelaModel.pml:496 (state 61)	[break]
+Selected: 11
+140:	proc  1 (management:1) PromelaModel.pml:520 (state 64)	[((lowestOfferReceived!=-(1)))]
+Selected: 10
+141:	proc  1 (management:1) PromelaModel.pml:521 (state 65)	[order.orderOrAssign = 1]
+Selected: 10
+142:	proc  1 (management:1) PromelaModel.pml:522 (state 66)	[managementToShuttles[shuttleToOffer]!order.start,order.end,order.load,order.orderOrAssign]
+Selected: 10
+143:	proc  1 (management:1) PromelaModel.pml:523 (state 67)	[lowestOfferReceived = -(1)]
+Selected: 7
+144:	proc  2 (shuttle:1) PromelaModel.pml:58 (state 6)	[managementToShuttles[shuttleId]?order.start,order.end,order.load,order.orderOrAssign]
+Selected: 8
+145:	proc  2 (shuttle:1) PromelaModel.pml:86 (state 28)	[((order.orderOrAssign==1))]
+Selected: 7
+146:	proc  2 (shuttle:1) PromelaModel.pml:87 (state 29)	[ordersAssigned[numOrdersAssigned].start = order.start]
+Selected: 7
+147:	proc  2 (shuttle:1) PromelaModel.pml:88 (state 30)	[ordersAssigned[numOrdersAssigned].end = order.end]
+Selected: 7
+148:	proc  2 (shuttle:1) PromelaModel.pml:89 (state 31)	[ordersAssigned[numOrdersAssigned].load = order.load]
+Selected: 7
+149:	proc  2 (shuttle:1) PromelaModel.pml:90 (state 32)	[ordersAssigned[numOrdersAssigned].orderOrAssign = order.orderOrAssign]
+Selected: 7
+150:	proc  2 (shuttle:1) PromelaModel.pml:91 (state 33)	[numOrdersAssigned = (numOrdersAssigned+1)]
+Selected: 9
+151:	proc  2 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 9
+152:	proc  2 (shuttle:1) PromelaModel.pml:256 (state 174)	[(((((numOrdersBeingExecuted==0)&&(numOrdersAssigned!=0))&&(shuttlePos[shuttleId].dest==ordersAssigned[0].start))&&((ordersAssigned[0].load+currLoad)<=capacity)))]
+Selected: 7
+153:	proc  2 (shuttle:1) PromelaModel.pml:258 (state 175)	[ordersBeingExecuted[numOrdersBeingExecuted].start = ordersAssigned[0].start]
+Selected: 7
+154:	proc  2 (shuttle:1) PromelaModel.pml:259 (state 176)	[ordersBeingExecuted[numOrdersBeingExecuted].end = ordersAssigned[0].end]
+Selected: 7
+155:	proc  2 (shuttle:1) PromelaModel.pml:260 (state 177)	[ordersBeingExecuted[numOrdersBeingExecuted].load = ordersAssigned[0].load]
+Selected: 7
+156:	proc  2 (shuttle:1) PromelaModel.pml:261 (state 178)	[ordersBeingExecuted[numOrdersBeingExecuted].orderOrAssign = ordersAssigned[0].orderOrAssign]
+Selected: 7
+157:	proc  2 (shuttle:1) PromelaModel.pml:262 (state 179)	[currLoad = (currLoad+ordersBeingExecuted[0].load)]
+Selected: 7
+158:	proc  2 (shuttle:1) PromelaModel.pml:264 (state 180)	[numOrdersBeingExecuted = (numOrdersBeingExecuted+1)]
+Selected: 7
+159:	proc  2 (shuttle:1) PromelaModel.pml:265 (state 181)	[numOrdersAssigned = (numOrdersAssigned-1)]
+Selected: 7
+160:	proc  2 (shuttle:1) PromelaModel.pml:267 (state 182)	[dummy = numOrdersAssigned]
+Selected: 7
+161:	proc  2 (shuttle:1) PromelaModel.pml:268 (state 183)	[dummy2 = 0]
+Selected: 8
+162:	proc  2 (shuttle:1) PromelaModel.pml:280 (state 191)	[((dummy==0))]
+Selected: 7
+163:	proc  2 (shuttle:1) PromelaModel.pml:281 (state 192)	[ordersAssigned[numOrdersAssigned].start = 0]
+Selected: 7
+164:	proc  2 (shuttle:1) PromelaModel.pml:282 (state 193)	[ordersAssigned[numOrdersAssigned].end = 0]
+Selected: 7
+165:	proc  2 (shuttle:1) PromelaModel.pml:283 (state 194)	[ordersAssigned[numOrdersAssigned].load = 0]
+Selected: 7
+166:	proc  2 (shuttle:1) PromelaModel.pml:284 (state 195)	[ordersAssigned[numOrdersAssigned].orderOrAssign = 0]
+Selected: 7
+167:	proc  2 (shuttle:1) PromelaModel.pml:271 (state 199)	[break]
+Selected: 9
+168:	proc  2 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 10
+169:	proc  2 (shuttle:1) PromelaModel.pml:289 (state 200)	[(((numOrdersBeingExecuted!=0)&&(shuttlePos[shuttleId].dest!=ordersBeingExecuted[0].end)))]
+Selected: 7
+170:	proc  2 (shuttle:1) PromelaModel.pml:292 (state 201)	[nextDest1 = (shuttlePos[shuttleId].dest+1)]
+Selected: 8
+171:	proc  2 (shuttle:1) PromelaModel.pml:293 (state 206)	[IF]
+Selected: 7
+172:	proc  2 (shuttle:1) PromelaModel.pml:296 (state 205)	[(1)]
+Selected: 7
+173:	proc  2 (shuttle:1) PromelaModel.pml:298 (state 208)	[nextDest2 = (shuttlePos[shuttleId].dest-1)]
+Selected: 7
+174:	proc  2 (shuttle:1) PromelaModel.pml:300 (state 209)	[((nextDest2==0))]
+Selected: 7
+175:	proc  2 (shuttle:1) PromelaModel.pml:301 (state 210)	[nextDest2 = 6]
+Selected: 7
+176:	proc  2 (shuttle:1) PromelaModel.pml:305 (state 215)	[difference1 = (nextDest1-ordersBeingExecuted[0].end)]
+Selected: 9
+177:	proc  2 (shuttle:1) PromelaModel.pml:306 (state 222)	[IF]
+Selected: 7
+178:	proc  2 (shuttle:1) PromelaModel.pml:311 (state 221)	[(1)]
+Selected: 7
+179:	proc  2 (shuttle:1) PromelaModel.pml:314 (state 224)	[((difference1<0))]
+Selected: 7
+180:	proc  2 (shuttle:1) PromelaModel.pml:315 (state 225)	[difference1 = (0-difference1)]
+Selected: 7
+181:	proc  2 (shuttle:1) PromelaModel.pml:319 (state 230)	[difference2 = (nextDest2-ordersBeingExecuted[0].end)]
+Selected: 9
+182:	proc  2 (shuttle:1) PromelaModel.pml:320 (state 237)	[IF]
+Selected: 7
+183:	proc  2 (shuttle:1) PromelaModel.pml:325 (state 236)	[(1)]
+Selected: 8
+184:	proc  2 (shuttle:1) PromelaModel.pml:327 (state 243)	[IF]
+Selected: 7
+185:	proc  2 (shuttle:1) PromelaModel.pml:330 (state 242)	[(1)]
+Selected: 7
+186:	proc  2 (shuttle:1) PromelaModel.pml:336 (state 245)	[((difference1<=difference2))]
+Selected: 7
+187:	proc  2 (shuttle:1) PromelaModel.pml:338 (state 246)	[((((shuttlePos[shuttleId].origin<nextDest1)&&(nextDest1!=6))&&(trackAvail[((nextDest1*2)-1)]==1)))]
+Selected: 7
+188:	proc  2 (shuttle:1) PromelaModel.pml:339 (state 247)	[trackAvail[((nextDest1*2)-1)] = 0]
+Selected: 7
+189:	proc  2 (shuttle:1) PromelaModel.pml:340 (state 248)	[shuttlePos[shuttleId].dest = nextDest1]
+Selected: 8
+190:	proc  2 (shuttle:1) PromelaModel.pml:95 (state 36)	[((shuttlePos[shuttleId].origin!=shuttlePos[shuttleId].dest))]
+Selected: 7
+191:	proc  2 (shuttle:1) PromelaModel.pml:99 (state 37)	[(((shuttlePos[shuttleId].origin<shuttlePos[shuttleId].dest)&&(shuttlePos[shuttleId].dest!=6)))]
+Selected: 7
+192:	proc  2 (shuttle:1) PromelaModel.pml:100 (state 38)	[trackAvail[((shuttlePos[shuttleId].dest*2)-1)] = 1]
+Selected: 9
+193:	proc  1 (management:1) PromelaModel.pml:473 (state 20)	[((dummy!=NUM_ORDERS))]
+Selected: 8
+194:	proc  1 (management:1) PromelaModel.pml:474 (state 21)	[order.start = orders[dummy].start]
+Selected: 8
+195:	proc  1 (management:1) PromelaModel.pml:475 (state 22)	[order.end = orders[dummy].end]
+Selected: 8
+196:	proc  1 (management:1) PromelaModel.pml:476 (state 23)	[order.load = orders[dummy].load]
+Selected: 8
+197:	proc  1 (management:1) PromelaModel.pml:477 (state 24)	[order.orderOrAssign = orders[dummy].orderOrAssign]
+Selected: 8
+198:	proc  1 (management:1) PromelaModel.pml:478 (state 25)	[dummy = (dummy+1)]
+Selected: 8
+199:	proc  1 (management:1) PromelaModel.pml:482 (state 26)	[managementToShuttles[numShuttlesSent]!order.start,order.end,order.load,order.orderOrAssign]
+Selected: 8
+200:	proc  1 (management:1) PromelaModel.pml:483 (state 27)	[numShuttlesSent = (numShuttlesSent+1)]
+Selected: 9
+201:	proc  1 (management:1) PromelaModel.pml:488 (state 31)	[((numShuttlesSent!=3))]
+Selected: 8
+202:	proc  1 (management:1) PromelaModel.pml:489 (state 32)	[(1)]
+Selected: 8
+203:	proc  1 (management:1) PromelaModel.pml:482 (state 26)	[managementToShuttles[numShuttlesSent]!order.start,order.end,order.load,order.orderOrAssign]
+Selected: 7
+204:	proc  2 (shuttle:1) PromelaModel.pml:122 (state 57)	[shuttlePos[shuttleId].origin = shuttlePos[shuttleId].dest]
+Selected: 10
+205:	proc  1 (management:1) PromelaModel.pml:483 (state 27)	[numShuttlesSent = (numShuttlesSent+1)]
+Selected: 11
+206:	proc  1 (management:1) PromelaModel.pml:488 (state 31)	[((numShuttlesSent!=3))]
+Selected: 10
+207:	proc  1 (management:1) PromelaModel.pml:489 (state 32)	[(1)]
+Selected: 10
+208:	proc  1 (management:1) PromelaModel.pml:482 (state 26)	[managementToShuttles[numShuttlesSent]!order.start,order.end,order.load,order.orderOrAssign]
+Selected: 10
+209:	proc  1 (management:1) PromelaModel.pml:483 (state 27)	[numShuttlesSent = (numShuttlesSent+1)]
+Selected: 10
+210:	proc  1 (management:1) PromelaModel.pml:485 (state 28)	[((numShuttlesSent==3))]
+Selected: 10
+211:	proc  1 (management:1) PromelaModel.pml:486 (state 29)	[numShuttlesSent = 0]
+Selected: 10
+212:	proc  1 (management:1) PromelaModel.pml:481 (state 37)	[break]
+Selected: 1
+213:	proc  4 (shuttle:1) PromelaModel.pml:58 (state 6)	[managementToShuttles[shuttleId]?order.start,order.end,order.load,order.orderOrAssign]
+Selected: 1
+214:	proc  4 (shuttle:1) PromelaModel.pml:64 (state 7)	[((order.orderOrAssign==0))]
+Selected: 1
+215:	proc  4 (shuttle:1) PromelaModel.pml:66 (state 8)	[(((order.load+currLoad)<=capacity))]
+Selected: 1
+216:	proc  4 (shuttle:1) PromelaModel.pml:68 (state 9)	[difference = (shuttlePos[shuttleId].dest-order.start)]
+Selected: 1
+217:	proc  4 (shuttle:1) PromelaModel.pml:69 (state 10)	[(((difference<=2)&&(difference>=-(2))))]
+Selected: 1
+218:	proc  4 (shuttle:1) PromelaModel.pml:70 (state 11)	[reply.offerOrRefuse = 1]
+Selected: 1
+219:	proc  4 (shuttle:1) PromelaModel.pml:85 (state 27)	[shuttlesToManagement!reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+220:	proc  1 (management:1) PromelaModel.pml:497 (state 38)	[shuttlesToManagement?reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+221:	proc  1 (management:1) PromelaModel.pml:498 (state 39)	[numShuttlesReplied = (numShuttlesReplied+1)]
+Selected: 11
+222:	proc  1 (management:1) PromelaModel.pml:501 (state 42)	[(((reply.offerOrRefuse==1)&&(lowestOfferReceived==-(1))))]
+Selected: 10
+223:	proc  1 (management:1) PromelaModel.pml:502 (state 43)	[lowestOfferReceived = reply.payment]
+Selected: 10
+224:	proc  1 (management:1) PromelaModel.pml:503 (state 44)	[shuttleToOffer = reply.shuttleId]
+Selected: 11
+225:	proc  1 (management:1) PromelaModel.pml:514 (state 55)	[((numShuttlesReplied!=3))]
+Selected: 10
+226:	proc  1 (management:1) PromelaModel.pml:514 (state 56)	[(1)]
+Selected: 4
+227:	proc  3 (shuttle:1) PromelaModel.pml:58 (state 6)	[managementToShuttles[shuttleId]?order.start,order.end,order.load,order.orderOrAssign]
+Selected: 4
+228:	proc  3 (shuttle:1) PromelaModel.pml:64 (state 7)	[((order.orderOrAssign==0))]
+Selected: 4
+229:	proc  3 (shuttle:1) PromelaModel.pml:66 (state 8)	[(((order.load+currLoad)<=capacity))]
+Selected: 4
+230:	proc  3 (shuttle:1) PromelaModel.pml:68 (state 9)	[difference = (shuttlePos[shuttleId].dest-order.start)]
+Selected: 4
+231:	proc  3 (shuttle:1) PromelaModel.pml:69 (state 10)	[(((difference<=2)&&(difference>=-(2))))]
+Selected: 4
+232:	proc  3 (shuttle:1) PromelaModel.pml:70 (state 11)	[reply.offerOrRefuse = 1]
+Selected: 4
+233:	proc  3 (shuttle:1) PromelaModel.pml:85 (state 27)	[shuttlesToManagement!reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+234:	proc  1 (management:1) PromelaModel.pml:497 (state 38)	[shuttlesToManagement?reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+235:	proc  1 (management:1) PromelaModel.pml:498 (state 39)	[numShuttlesReplied = (numShuttlesReplied+1)]
+Selected: 12
+236:	proc  1 (management:1) PromelaModel.pml:504 (state 45)	[((((reply.offerOrRefuse==1)&&(lowestOfferReceived!=-(1)))&&(reply.payment>=lowestOfferReceived)))]
+Selected: 10
+237:	proc  1 (management:1) PromelaModel.pml:504 (state 46)	[(1)]
+Selected: 11
+238:	proc  1 (management:1) PromelaModel.pml:514 (state 55)	[((numShuttlesReplied!=3))]
+Selected: 10
+239:	proc  1 (management:1) PromelaModel.pml:514 (state 56)	[(1)]
+Selected: 7
+240:	proc  2 (shuttle:1) PromelaModel.pml:58 (state 6)	[managementToShuttles[shuttleId]?order.start,order.end,order.load,order.orderOrAssign]
+Selected: 7
+241:	proc  2 (shuttle:1) PromelaModel.pml:64 (state 7)	[((order.orderOrAssign==0))]
+Selected: 7
+242:	proc  2 (shuttle:1) PromelaModel.pml:66 (state 8)	[(((order.load+currLoad)<=capacity))]
+Selected: 7
+243:	proc  2 (shuttle:1) PromelaModel.pml:68 (state 9)	[difference = (shuttlePos[shuttleId].dest-order.start)]
+Selected: 7
+244:	proc  2 (shuttle:1) PromelaModel.pml:69 (state 10)	[(((difference<=2)&&(difference>=-(2))))]
+Selected: 7
+245:	proc  2 (shuttle:1) PromelaModel.pml:70 (state 11)	[reply.offerOrRefuse = 1]
+Selected: 7
+246:	proc  2 (shuttle:1) PromelaModel.pml:85 (state 27)	[shuttlesToManagement!reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+247:	proc  1 (management:1) PromelaModel.pml:497 (state 38)	[shuttlesToManagement?reply.shuttleId,reply.offerOrRefuse,reply.payment]
+Selected: 10
+248:	proc  1 (management:1) PromelaModel.pml:498 (state 39)	[numShuttlesReplied = (numShuttlesReplied+1)]
+Selected: 13
+249:	proc  1 (management:1) PromelaModel.pml:505 (state 47)	[((((reply.offerOrRefuse==1)&&(lowestOfferReceived!=-(1)))&&(reply.payment<lowestOfferReceived)))]
+Selected: 10
+250:	proc  1 (management:1) PromelaModel.pml:506 (state 48)	[lowestOfferReceived = reply.payment]
+Selected: 10
+251:	proc  1 (management:1) PromelaModel.pml:507 (state 49)	[shuttleToOffer = reply.shuttleId]
+Selected: 10
+252:	proc  1 (management:1) PromelaModel.pml:511 (state 52)	[((numShuttlesReplied==3))]
+Selected: 10
+253:	proc  1 (management:1) PromelaModel.pml:512 (state 53)	[numShuttlesReplied = 0]
+Selected: 10
+254:	proc  1 (management:1) PromelaModel.pml:496 (state 61)	[break]
+Selected: 11
+255:	proc  1 (management:1) PromelaModel.pml:520 (state 64)	[((lowestOfferReceived!=-(1)))]
+Selected: 10
+256:	proc  1 (management:1) PromelaModel.pml:521 (state 65)	[order.orderOrAssign = 1]
+Selected: 10
+257:	proc  1 (management:1) PromelaModel.pml:522 (state 66)	[managementToShuttles[shuttleToOffer]!order.start,order.end,order.load,order.orderOrAssign]
+Selected: 10
+258:	proc  1 (management:1) PromelaModel.pml:523 (state 67)	[lowestOfferReceived = -(1)]
+Selected: 10
+259:	proc  1 (management:1) PromelaModel.pml:471 (state 18)	[((dummy==NUM_ORDERS))]
+Selected: 10
+260:	proc  1 (management:1) PromelaModel.pml:470 (state 72)	[break]
+Selected: 7
+261:	proc  2 (shuttle:1) PromelaModel.pml:58 (state 6)	[managementToShuttles[shuttleId]?order.start,order.end,order.load,order.orderOrAssign]
+Selected: 8
+262:	proc  2 (shuttle:1) PromelaModel.pml:86 (state 28)	[((order.orderOrAssign==1))]
+Selected: 7
+263:	proc  2 (shuttle:1) PromelaModel.pml:87 (state 29)	[ordersAssigned[numOrdersAssigned].start = order.start]
+Selected: 7
+264:	proc  2 (shuttle:1) PromelaModel.pml:88 (state 30)	[ordersAssigned[numOrdersAssigned].end = order.end]
+Selected: 7
+265:	proc  2 (shuttle:1) PromelaModel.pml:89 (state 31)	[ordersAssigned[numOrdersAssigned].load = order.load]
+Selected: 7
+266:	proc  2 (shuttle:1) PromelaModel.pml:90 (state 32)	[ordersAssigned[numOrdersAssigned].orderOrAssign = order.orderOrAssign]
+Selected: 7
+267:	proc  2 (shuttle:1) PromelaModel.pml:91 (state 33)	[numOrdersAssigned = (numOrdersAssigned+1)]
+Selected: 9
+268:	proc  2 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 10
+269:	proc  2 (shuttle:1) PromelaModel.pml:289 (state 200)	[(((numOrdersBeingExecuted!=0)&&(shuttlePos[shuttleId].dest!=ordersBeingExecuted[0].end)))]
+Selected: 7
+270:	proc  2 (shuttle:1) PromelaModel.pml:292 (state 201)	[nextDest1 = (shuttlePos[shuttleId].dest+1)]
+Selected: 8
+271:	proc  2 (shuttle:1) PromelaModel.pml:293 (state 206)	[IF]
+Selected: 7
+272:	proc  2 (shuttle:1) PromelaModel.pml:296 (state 205)	[(1)]
+Selected: 7
+273:	proc  2 (shuttle:1) PromelaModel.pml:298 (state 208)	[nextDest2 = (shuttlePos[shuttleId].dest-1)]
+Selected: 8
+274:	proc  2 (shuttle:1) PromelaModel.pml:299 (state 213)	[IF]
+Selected: 7
+275:	proc  2 (shuttle:1) PromelaModel.pml:302 (state 212)	[(1)]
+Selected: 7
+276:	proc  2 (shuttle:1) PromelaModel.pml:305 (state 215)	[difference1 = (nextDest1-ordersBeingExecuted[0].end)]
+Selected: 9
+277:	proc  2 (shuttle:1) PromelaModel.pml:306 (state 222)	[IF]
+Selected: 7
+278:	proc  2 (shuttle:1) PromelaModel.pml:311 (state 221)	[(1)]
+Selected: 8
+279:	proc  2 (shuttle:1) PromelaModel.pml:313 (state 228)	[IF]
+Selected: 7
+280:	proc  2 (shuttle:1) PromelaModel.pml:316 (state 227)	[(1)]
+Selected: 7
+281:	proc  2 (shuttle:1) PromelaModel.pml:319 (state 230)	[difference2 = (nextDest2-ordersBeingExecuted[0].end)]
+Selected: 9
+282:	proc  2 (shuttle:1) PromelaModel.pml:320 (state 237)	[IF]
+Selected: 7
+283:	proc  2 (shuttle:1) PromelaModel.pml:325 (state 236)	[(1)]
+Selected: 7
+284:	proc  2 (shuttle:1) PromelaModel.pml:328 (state 239)	[((difference2<0))]
+Selected: 7
+285:	proc  2 (shuttle:1) PromelaModel.pml:329 (state 240)	[difference2 = (0-difference2)]
+Selected: 7
+286:	proc  2 (shuttle:1) PromelaModel.pml:336 (state 245)	[((difference1<=difference2))]
+Selected: 7
+287:	proc  2 (shuttle:1) PromelaModel.pml:338 (state 246)	[((((shuttlePos[shuttleId].origin<nextDest1)&&(nextDest1!=6))&&(trackAvail[((nextDest1*2)-1)]==1)))]
+Selected: 7
+288:	proc  2 (shuttle:1) PromelaModel.pml:339 (state 247)	[trackAvail[((nextDest1*2)-1)] = 0]
+Selected: 7
+289:	proc  2 (shuttle:1) PromelaModel.pml:340 (state 248)	[shuttlePos[shuttleId].dest = nextDest1]
+Selected: 8
+290:	proc  2 (shuttle:1) PromelaModel.pml:95 (state 36)	[((shuttlePos[shuttleId].origin!=shuttlePos[shuttleId].dest))]
+Selected: 7
+291:	proc  2 (shuttle:1) PromelaModel.pml:99 (state 37)	[(((shuttlePos[shuttleId].origin<shuttlePos[shuttleId].dest)&&(shuttlePos[shuttleId].dest!=6)))]
+Selected: 7
+292:	proc  2 (shuttle:1) PromelaModel.pml:100 (state 38)	[trackAvail[((shuttlePos[shuttleId].dest*2)-1)] = 1]
+Selected: 3
+293:	proc  4 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 1
+294:	proc  4 (shuttle:1) PromelaModel.pml:129 (state 59)	[(((numOrdersBeingExecuted==0)&&(numOrdersAssigned==0)))]
+Selected: 1
+295:	proc  4 (shuttle:1) PromelaModel.pml:130 (state 60)	[(1)]
+Selected: 6
+296:	proc  3 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 4
+297:	proc  3 (shuttle:1) PromelaModel.pml:129 (state 59)	[(((numOrdersBeingExecuted==0)&&(numOrdersAssigned==0)))]
+Selected: 4
+298:	proc  3 (shuttle:1) PromelaModel.pml:130 (state 60)	[(1)]
+Selected: 7
+299:	proc  2 (shuttle:1) PromelaModel.pml:122 (state 57)	[shuttlePos[shuttleId].origin = shuttlePos[shuttleId].dest]
+Selected: 6
+300:	proc  3 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 4
+301:	proc  3 (shuttle:1) PromelaModel.pml:129 (state 59)	[(((numOrdersBeingExecuted==0)&&(numOrdersAssigned==0)))]
+Selected: 4
+302:	proc  3 (shuttle:1) PromelaModel.pml:130 (state 60)	[(1)]
+Selected: 9
+303:	proc  2 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 11
+304:	proc  2 (shuttle:1) PromelaModel.pml:412 (state 313)	[(((numOrdersBeingExecuted!=0)&&(shuttlePos[shuttleId].dest==ordersBeingExecuted[0].end)))]
+Selected: 7
+305:	proc  2 (shuttle:1) PromelaModel.pml:413 (state 314)	[numOrdersBeingExecuted = (numOrdersBeingExecuted-1)]
+Selected: 7
+306:	proc  2 (shuttle:1) PromelaModel.pml:414 (state 315)	[currLoad = (currLoad-ordersBeingExecuted[0].load)]
+Selected: 7
+307:	proc  2 (shuttle:1) PromelaModel.pml:416 (state 316)	[dummy = numOrdersBeingExecuted]
+Selected: 7
+308:	proc  2 (shuttle:1) PromelaModel.pml:417 (state 317)	[dummy2 = 0]
+Selected: 8
+309:	proc  2 (shuttle:1) PromelaModel.pml:429 (state 325)	[((dummy==0))]
+Selected: 7
+310:	proc  2 (shuttle:1) PromelaModel.pml:430 (state 326)	[ordersBeingExecuted[numOrdersBeingExecuted].start = 0]
+Selected: 7
+311:	proc  2 (shuttle:1) PromelaModel.pml:431 (state 327)	[ordersBeingExecuted[numOrdersBeingExecuted].end = 0]
+Selected: 7
+312:	proc  2 (shuttle:1) PromelaModel.pml:432 (state 328)	[ordersBeingExecuted[numOrdersBeingExecuted].load = 0]
+Selected: 7
+313:	proc  2 (shuttle:1) PromelaModel.pml:433 (state 329)	[ordersBeingExecuted[numOrdersBeingExecuted].orderOrAssign = 0]
+Selected: 7
+314:	proc  2 (shuttle:1) PromelaModel.pml:420 (state 333)	[break]
+Selected: 9
+315:	proc  2 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 8
+316:	proc  2 (shuttle:1) PromelaModel.pml:133 (state 61)	[((((numOrdersBeingExecuted==0)&&(numOrdersAssigned!=0))&&(shuttlePos[shuttleId].dest!=ordersAssigned[0].start)))]
+Selected: 7
+317:	proc  2 (shuttle:1) PromelaModel.pml:136 (state 62)	[nextDest1 = (shuttlePos[shuttleId].dest+1)]
+Selected: 8
+318:	proc  2 (shuttle:1) PromelaModel.pml:137 (state 67)	[IF]
+Selected: 7
+319:	proc  2 (shuttle:1) PromelaModel.pml:140 (state 66)	[(1)]
+Selected: 7
+320:	proc  2 (shuttle:1) PromelaModel.pml:142 (state 69)	[nextDest2 = (shuttlePos[shuttleId].dest-1)]
+Selected: 8
+321:	proc  2 (shuttle:1) PromelaModel.pml:143 (state 74)	[IF]
+Selected: 7
+322:	proc  2 (shuttle:1) PromelaModel.pml:146 (state 73)	[(1)]
+Selected: 7
+323:	proc  2 (shuttle:1) PromelaModel.pml:149 (state 76)	[difference1 = (nextDest1-ordersAssigned[0].start)]
+Selected: 9
+324:	proc  2 (shuttle:1) PromelaModel.pml:150 (state 83)	[IF]
+Selected: 7
+325:	proc  2 (shuttle:1) PromelaModel.pml:155 (state 82)	[(1)]
+Selected: 8
+326:	proc  2 (shuttle:1) PromelaModel.pml:157 (state 89)	[IF]
+Selected: 7
+327:	proc  2 (shuttle:1) PromelaModel.pml:160 (state 88)	[(1)]
+Selected: 7
+328:	proc  2 (shuttle:1) PromelaModel.pml:163 (state 91)	[difference2 = (nextDest2-ordersAssigned[0].start)]
+Selected: 9
+329:	proc  2 (shuttle:1) PromelaModel.pml:164 (state 98)	[IF]
+Selected: 7
+330:	proc  2 (shuttle:1) PromelaModel.pml:169 (state 97)	[(1)]
+Selected: 8
+331:	proc  2 (shuttle:1) PromelaModel.pml:171 (state 104)	[IF]
+Selected: 7
+332:	proc  2 (shuttle:1) PromelaModel.pml:174 (state 103)	[(1)]
+Selected: 8
+333:	proc  2 (shuttle:1) PromelaModel.pml:217 (state 139)	[((difference1>difference2))]
+Selected: 9
+334:	proc  2 (shuttle:1) PromelaModel.pml:234 (state 154)	[((((shuttlePos[shuttleId].origin>nextDest2)&&(nextDest2!=1))&&(trackAvail[(nextDest2*2)]==1)))]
+Selected: 7
+335:	proc  2 (shuttle:1) PromelaModel.pml:235 (state 155)	[trackAvail[(nextDest2*2)] = 0]
+Selected: 7
+336:	proc  2 (shuttle:1) PromelaModel.pml:236 (state 156)	[shuttlePos[shuttleId].dest = nextDest2]
+Selected: 8
+337:	proc  2 (shuttle:1) PromelaModel.pml:95 (state 36)	[((shuttlePos[shuttleId].origin!=shuttlePos[shuttleId].dest))]
+Selected: 9
+338:	proc  2 (shuttle:1) PromelaModel.pml:110 (state 46)	[(((shuttlePos[shuttleId].origin>shuttlePos[shuttleId].dest)&&(shuttlePos[shuttleId].dest!=1)))]
+Selected: 7
+339:	proc  2 (shuttle:1) PromelaModel.pml:111 (state 47)	[trackAvail[(shuttlePos[shuttleId].dest*2)] = 1]
+Selected: 7
+340:	proc  2 (shuttle:1) PromelaModel.pml:122 (state 57)	[shuttlePos[shuttleId].origin = shuttlePos[shuttleId].dest]
+Selected: 9
+341:	proc  2 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 9
+342:	proc  2 (shuttle:1) PromelaModel.pml:256 (state 174)	[(((((numOrdersBeingExecuted==0)&&(numOrdersAssigned!=0))&&(shuttlePos[shuttleId].dest==ordersAssigned[0].start))&&((ordersAssigned[0].load+currLoad)<=capacity)))]
+Selected: 7
+343:	proc  2 (shuttle:1) PromelaModel.pml:258 (state 175)	[ordersBeingExecuted[numOrdersBeingExecuted].start = ordersAssigned[0].start]
+Selected: 7
+344:	proc  2 (shuttle:1) PromelaModel.pml:259 (state 176)	[ordersBeingExecuted[numOrdersBeingExecuted].end = ordersAssigned[0].end]
+Selected: 7
+345:	proc  2 (shuttle:1) PromelaModel.pml:260 (state 177)	[ordersBeingExecuted[numOrdersBeingExecuted].load = ordersAssigned[0].load]
+Selected: 7
+346:	proc  2 (shuttle:1) PromelaModel.pml:261 (state 178)	[ordersBeingExecuted[numOrdersBeingExecuted].orderOrAssign = ordersAssigned[0].orderOrAssign]
+Selected: 7
+347:	proc  2 (shuttle:1) PromelaModel.pml:262 (state 179)	[currLoad = (currLoad+ordersBeingExecuted[0].load)]
+Selected: 7
+348:	proc  2 (shuttle:1) PromelaModel.pml:264 (state 180)	[numOrdersBeingExecuted = (numOrdersBeingExecuted+1)]
+Selected: 7
+349:	proc  2 (shuttle:1) PromelaModel.pml:265 (state 181)	[numOrdersAssigned = (numOrdersAssigned-1)]
+Selected: 7
+350:	proc  2 (shuttle:1) PromelaModel.pml:267 (state 182)	[dummy = numOrdersAssigned]
+Selected: 7
+351:	proc  2 (shuttle:1) PromelaModel.pml:268 (state 183)	[dummy2 = 0]
+Selected: 8
+352:	proc  2 (shuttle:1) PromelaModel.pml:280 (state 191)	[((dummy==0))]
+Selected: 7
+353:	proc  2 (shuttle:1) PromelaModel.pml:281 (state 192)	[ordersAssigned[numOrdersAssigned].start = 0]
+Selected: 7
+354:	proc  2 (shuttle:1) PromelaModel.pml:282 (state 193)	[ordersAssigned[numOrdersAssigned].end = 0]
+Selected: 7
+355:	proc  2 (shuttle:1) PromelaModel.pml:283 (state 194)	[ordersAssigned[numOrdersAssigned].load = 0]
+Selected: 7
+356:	proc  2 (shuttle:1) PromelaModel.pml:284 (state 195)	[ordersAssigned[numOrdersAssigned].orderOrAssign = 0]
+Selected: 7
+357:	proc  2 (shuttle:1) PromelaModel.pml:271 (state 199)	[break]
+Selected: 9
+358:	proc  2 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 10
+359:	proc  2 (shuttle:1) PromelaModel.pml:289 (state 200)	[(((numOrdersBeingExecuted!=0)&&(shuttlePos[shuttleId].dest!=ordersBeingExecuted[0].end)))]
+Selected: 7
+360:	proc  2 (shuttle:1) PromelaModel.pml:292 (state 201)	[nextDest1 = (shuttlePos[shuttleId].dest+1)]
+Selected: 8
+361:	proc  2 (shuttle:1) PromelaModel.pml:293 (state 206)	[IF]
+Selected: 7
+362:	proc  2 (shuttle:1) PromelaModel.pml:296 (state 205)	[(1)]
+Selected: 7
+363:	proc  2 (shuttle:1) PromelaModel.pml:298 (state 208)	[nextDest2 = (shuttlePos[shuttleId].dest-1)]
+Selected: 8
+364:	proc  2 (shuttle:1) PromelaModel.pml:299 (state 213)	[IF]
+Selected: 7
+365:	proc  2 (shuttle:1) PromelaModel.pml:302 (state 212)	[(1)]
+Selected: 7
+366:	proc  2 (shuttle:1) PromelaModel.pml:305 (state 215)	[difference1 = (nextDest1-ordersBeingExecuted[0].end)]
+Selected: 9
+367:	proc  2 (shuttle:1) PromelaModel.pml:306 (state 222)	[IF]
+Selected: 7
+368:	proc  2 (shuttle:1) PromelaModel.pml:311 (state 221)	[(1)]
+Selected: 8
+369:	proc  2 (shuttle:1) PromelaModel.pml:313 (state 228)	[IF]
+Selected: 7
+370:	proc  2 (shuttle:1) PromelaModel.pml:316 (state 227)	[(1)]
+Selected: 7
+371:	proc  2 (shuttle:1) PromelaModel.pml:319 (state 230)	[difference2 = (nextDest2-ordersBeingExecuted[0].end)]
+Selected: 9
+372:	proc  2 (shuttle:1) PromelaModel.pml:320 (state 237)	[IF]
+Selected: 7
+373:	proc  2 (shuttle:1) PromelaModel.pml:325 (state 236)	[(1)]
+Selected: 7
+374:	proc  2 (shuttle:1) PromelaModel.pml:328 (state 239)	[((difference2<0))]
+Selected: 7
+375:	proc  2 (shuttle:1) PromelaModel.pml:329 (state 240)	[difference2 = (0-difference2)]
+Selected: 7
+376:	proc  2 (shuttle:1) PromelaModel.pml:336 (state 245)	[((difference1<=difference2))]
+Selected: 7
+377:	proc  2 (shuttle:1) PromelaModel.pml:338 (state 246)	[((((shuttlePos[shuttleId].origin<nextDest1)&&(nextDest1!=6))&&(trackAvail[((nextDest1*2)-1)]==1)))]
+Selected: 7
+378:	proc  2 (shuttle:1) PromelaModel.pml:339 (state 247)	[trackAvail[((nextDest1*2)-1)] = 0]
+Selected: 7
+379:	proc  2 (shuttle:1) PromelaModel.pml:340 (state 248)	[shuttlePos[shuttleId].dest = nextDest1]
+Selected: 8
+380:	proc  2 (shuttle:1) PromelaModel.pml:95 (state 36)	[((shuttlePos[shuttleId].origin!=shuttlePos[shuttleId].dest))]
+Selected: 7
+381:	proc  2 (shuttle:1) PromelaModel.pml:99 (state 37)	[(((shuttlePos[shuttleId].origin<shuttlePos[shuttleId].dest)&&(shuttlePos[shuttleId].dest!=6)))]
+Selected: 7
+382:	proc  2 (shuttle:1) PromelaModel.pml:100 (state 38)	[trackAvail[((shuttlePos[shuttleId].dest*2)-1)] = 1]
+Selected: 7
+383:	proc  2 (shuttle:1) PromelaModel.pml:122 (state 57)	[shuttlePos[shuttleId].origin = shuttlePos[shuttleId].dest]
+Selected: 9
+384:	proc  2 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 11
+385:	proc  2 (shuttle:1) PromelaModel.pml:412 (state 313)	[(((numOrdersBeingExecuted!=0)&&(shuttlePos[shuttleId].dest==ordersBeingExecuted[0].end)))]
+Selected: 7
+386:	proc  2 (shuttle:1) PromelaModel.pml:413 (state 314)	[numOrdersBeingExecuted = (numOrdersBeingExecuted-1)]
+Selected: 7
+387:	proc  2 (shuttle:1) PromelaModel.pml:414 (state 315)	[currLoad = (currLoad-ordersBeingExecuted[0].load)]
+Selected: 7
+388:	proc  2 (shuttle:1) PromelaModel.pml:416 (state 316)	[dummy = numOrdersBeingExecuted]
+Selected: 7
+389:	proc  2 (shuttle:1) PromelaModel.pml:417 (state 317)	[dummy2 = 0]
+Selected: 8
+390:	proc  2 (shuttle:1) PromelaModel.pml:429 (state 325)	[((dummy==0))]
+Selected: 7
+391:	proc  2 (shuttle:1) PromelaModel.pml:430 (state 326)	[ordersBeingExecuted[numOrdersBeingExecuted].start = 0]
+Selected: 7
+392:	proc  2 (shuttle:1) PromelaModel.pml:431 (state 327)	[ordersBeingExecuted[numOrdersBeingExecuted].end = 0]
+Selected: 7
+393:	proc  2 (shuttle:1) PromelaModel.pml:432 (state 328)	[ordersBeingExecuted[numOrdersBeingExecuted].load = 0]
+Selected: 7
+394:	proc  2 (shuttle:1) PromelaModel.pml:433 (state 329)	[ordersBeingExecuted[numOrdersBeingExecuted].orderOrAssign = 0]
+Selected: 7
+395:	proc  2 (shuttle:1) PromelaModel.pml:420 (state 333)	[break]
+Selected: 9
+396:	proc  2 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 7
+397:	proc  2 (shuttle:1) PromelaModel.pml:129 (state 59)	[(((numOrdersBeingExecuted==0)&&(numOrdersAssigned==0)))]
+Selected: 7
+398:	proc  2 (shuttle:1) PromelaModel.pml:130 (state 60)	[(1)]
+Selected: 6
+399:	proc  3 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 4
+400:	proc  3 (shuttle:1) PromelaModel.pml:129 (state 59)	[(((numOrdersBeingExecuted==0)&&(numOrdersAssigned==0)))]
+Selected: 4
+401:	proc  3 (shuttle:1) PromelaModel.pml:130 (state 60)	[(1)]
+Selected: 3
+402:	proc  4 (shuttle:1) PromelaModel.pml:125 (state 58)	[((shuttlePos[shuttleId].origin==shuttlePos[shuttleId].dest))]
+Selected: 1
+403:	proc  4 (shuttle:1) PromelaModel.pml:129 (state 59)	[(((numOrdersBeingExecuted==0)&&(numOrdersAssigned==0)))]
+Selected: 1
+404:	proc  4 (shuttle:1) PromelaModel.pml:130 (state 60)	[(1)]
+Selected: q
+
+
+
+===end Sim===
+===start Queues===
+[queues, step 261]
+
+q 1  :: (managementToShuttles[0]): 
+q 2  :: (managementToShuttles[1]): 
+q 3  :: (managementToShuttles[2]): 
+q 4  :: (shuttlesToManagement): 
+
+
+===end Queues===
+LTL_Panel	0
+a_mode	1
+bc_mode	0
+bc_bound	0
+bf_mode	0
+c_mode	0
+cc_mode	0
+e_mode	1
+estop		0
+f_mode	0
+it_mode	0
+ma_mode	0
+p_mode	0
+peg		0
+po_mode	1
+q_mode	0
+s_mode	0
+sv_mode	0
+u_mode	1
+vranges	0
+x_mode	0
+===start VerOut===
+verification result:
+
+
+===end VerOut===
+srow0 	1
+srow1 	5
+srow2 	100
+srow3 	10000
+srow4 	4
+srow5 	
+srow6 	512M
+srow7 	60m
+srow8 	1.5
+srow9 	512
+srow10	250000
+srow11	
+srow12	-c1 -x -n
+===start CCopts===
+-DBITSTATE -DPUTPID             # basic dfs
+-DBITSTATE -DPUTPID -DREVERSE   # reversed transition ordering
+-DBITSTATE -DPUTPID -DT_REVERSE # reversed process ordering
+-DBITSTATE -DPUTPID -DREVERSE -DT_REVERSE       # both
+-DBITSTATE -DPUTPID -DP_RAND -DT_RAND   # same series with randomization
+-DBITSTATE -DPUTPID -DP_RAND -DT_RAND -DT_REVERSE
+-DBITSTATE -DPUTPID -DP_RAND -DT_RAND -DREVERSE
+-DBITSTATE -DPUTPID -DP_RAND -DT_RAND -DREVERSE -DT_REVERSE
+
+
+===end CCopts===
+===start SwSetup===
+swarm setup output
+
+
+===end SwSetup===
+===start SwRun===
+swarm run output
+no 'swarm' command is found
+available from: http://spinroot.com/swarm/
+
+
+===end SwRun===
