@@ -1,6 +1,6 @@
 #define NUM_STATIONS	6
 #define ARRAY_SIZE		3
-#define NUM_SHUTTLES	3
+#define NUM_SHUTTLES	1
 
 typedef orderType {
 	int start;
@@ -93,9 +93,143 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 	:: (shuttlePos[shuttleId].origin != shuttlePos[shuttleId].dest) ->
 		shuttlePos[shuttleId].origin = shuttlePos[shuttleId].dest; 
 			
-	// // Shuttle at station
-	// :: (shuttlePos[shuttleId].origin == shuttlePos[shuttleId].dest) ->
-	// 	if
+	// Shuttle at station
+	:: (shuttlePos[shuttleId].origin == shuttlePos[shuttleId].dest) ->
+		if
+		:: (numOrdersBeingExecuted == 0 && numOrdersAssigned == 0) ->
+			skip;
+
+		// MOVE TO STATION TO LOAD ORDER
+		:: (numOrdersBeingExecuted == 0 && numOrdersAssigned != 0 && shuttlePos[shuttleId].origin != ordersAssigned[0].start) ->
+
+			// find the shortest way to go to station to load order
+			nextDest1 = shuttlePos[shuttleId].dest + 1;
+			if
+			:: (nextDest1 > NUM_STATIONS) ->
+				nextDest1 = 0;
+			fi;
+			nextDest2 = shuttlePos[shuttleId].dest - 1;
+			if
+			:: (nextDest2 == 0) ->
+				nextDest2 = NUM_STATIONS;
+			fi;
+
+			difference1 = nextDest1 - ordersAssigned[0].start;
+			if
+			:: (difference1 < (NUM_STATIONS/2)) ->
+				difference1 = difference1 + NUM_STATIONS;
+			:: (difference1 > (NUM_STATIONS/2)) ->
+				difference1 = difference1 - NUM_STATIONS;
+			fi;
+			if
+			:: (difference1 < 0) ->
+				difference1 = 0 - difference1;
+			fi;
+
+			difference2 = nextDest2 - ordersAssigned[0].start;
+			if
+			:: (difference2 < (NUM_STATIONS/2)) ->
+				difference2 = difference2 + NUM_STATIONS;
+			:: (difference2 > (NUM_STATIONS/2)) ->
+				difference2 = difference2 + NUM_STATIONS;
+			fi;
+			if
+			:: (difference2 < 0) ->
+				difference2 = 0 - difference2;
+			fi;
+
+			if
+			:: (difference1 <= difference2) ->
+				shuttlePos[shuttleId].dest = nextDest1;
+			:: (difference1 > difference2) ->
+				shuttlePos[shuttleId].dest = nextDest2;
+			fi;
+			
+		// LOAD ORDER
+		:: (numOrdersBeingExecuted == 0 && numOrdersAssigned != 0 && shuttlePos[shuttleId].origin == ordersAssigned[0].start) ->
+			numOrdersBeingExecuted = numOrdersBeingExecuted + 1;
+			numOrdersAssigned = numOrdersAssigned - 1;
+			
+			ordersBeingExecuted[0].start = ordersAssigned[0].start;
+			ordersBeingExecuted[0].end = ordersAssigned[0].end;
+			ordersBeingExecuted[0].load = ordersAssigned[0].load;
+			ordersBeingExecuted[0].orderOrAssign = ordersAssigned[0].orderOrAssign;
+
+			dummy = numOrdersAssigned;
+			dummy2 = 0;
+
+			do
+			:: (dummy != 0) ->
+				ordersAssigned[dummy2].start = ordersAssigned[dummy2 + 1].start;
+				ordersAssigned[dummy2].end = ordersAssigned[dummy2 + 1].end;
+				ordersAssigned[dummy2].load = ordersAssigned[dummy2 + 1].load;
+				ordersAssigned[dummy2].orderOrAssign = ordersAssigned[dummy2 + 1].orderOrAssign;
+				dummy2 = dummy2 + 1;
+				dummy = dummy - 1;
+			
+			:: (dummy == 0) ->
+				ordersAssigned[numOrdersAssigned].start = 0;
+				ordersAssigned[numOrdersAssigned].end = 0;
+				ordersAssigned[numOrdersAssigned].load = 0;
+				ordersAssigned[numOrdersAssigned].orderOrAssign = 0;
+				break;
+			od;
+
+		// MOVE TO STATION TO UNLOAD ORDER
+		:: (numOrdersBeingExecuted != 0 && shuttlePos[shuttleId].origin != ordersBeingExecuted[0].start) ->
+			
+			// find the shortest way to go to station to load order
+			nextDest1 = shuttlePos[shuttleId].dest + 1;
+			if
+			:: (nextDest1 > NUM_STATIONS) ->
+				nextDest1 = 0;
+			fi;
+			nextDest2 = shuttlePos[shuttleId].dest - 1;
+			if
+			:: (nextDest2 == 0) ->
+				nextDest2 = NUM_STATIONS;
+			fi;
+
+			difference1 = nextDest1 - ordersBeingExecuted[0].end;
+			if
+			:: (difference1 < (NUM_STATIONS/2)) ->
+				difference1 = difference1 + NUM_STATIONS;
+			:: (difference1 > (NUM_STATIONS/2)) ->
+				difference1 = difference1 - NUM_STATIONS;
+			fi;
+			if
+			:: (difference1 < 0) ->
+				difference1 = 0 - difference1;
+			fi;
+
+			difference2 = nextDest2 - ordersBeingExecuted[0].end;
+			if
+			:: (difference2 < (NUM_STATIONS/2)) ->
+				difference2 = difference2 + NUM_STATIONS;
+			:: (difference2 > (NUM_STATIONS/2)) ->
+				difference2 = difference2 + NUM_STATIONS;
+			fi;
+			if
+			:: (difference2 < 0) ->
+				difference2 = 0 - difference2;
+			fi;
+
+			if
+			:: (difference1 <= difference2) ->
+				shuttlePos[shuttleId].dest = nextDest1;
+			:: (difference1 > difference2) ->
+				shuttlePos[shuttleId].dest = nextDest2;
+			fi;
+
+		// // IF SHUTTLE IS CARRYING ANY ORDERS, CHECK IF ANY ORDERS CAN BE DROPPED OFF
+		// :: (ordersAssigned[0].load != 0) ->
+		// 	dummy = numOrdersBeingExecuted;
+		// 	dummy2 = 0;
+		// 	do 
+		// 	:: (dummy != 0) ->
+		// 		if
+		// 		:: (shuttlePos[shuttleId].origin == ordersBeingExecuted[dummy2]) ->
+					
 
 	// 	// UNLOAD THE ORDER THAT IT IS EXECUTING
 	// 	:: (targetStationToUnload == shuttlePos[shuttleId].dest) ->
@@ -112,16 +246,15 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 	// 			ordersBeingExecuted[dummy2].load = ordersBeingExecuted[dummy2 + 1].load;
 	// 			ordersBeingExecuted[dummy2].orderOrAssign = ordersBeingExecuted[dummy2 + 1].orderOrAssign;
 	// 			dummy2 = dummy2 + 1;
+	//			dummy = dummy - 1;
+	//
 	// 		:: (dummy == 0) ->
+	//			ordersBeingExecuted[numOrdersBeingExecuted].start = 0;
+	//			ordersBeingExecuted[numOrdersBeingExecuted].end = 0;
+	//			ordersBeingExecuted[numOrdersBeingExecuted].load = 0;
+	//			ordersBeingExecuted[numOrdersBeingExecuted].orderOrAssign = 0;
 	// 			break;
 	// 		od;
-
-	// 		if 
-	// 		:: (numOrdersBeingExecuted == 0) -> 
-	// 			targetStationToUnload = 0;
-	// 		:: (numOrdersBeingExecuted != 0) ->
-	// 			targetStationToUnload = ordersBeingExecuted[0].end;
-	// 		fi;
 
 	// 	// GO TO THE STATION TO UNLOAD THE ORDER THAT IT IS EXECUTING
 	// 	:: (targetStationToUnload != shuttlePos[shuttleId].dest && targetStationToUnload != 0) ->
@@ -242,7 +375,7 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 	// 	// NOT CURRENTLY EXECUTING ANY ORDERS, NO ORDERS ASSIGNED
 	// 	:: (targetStationToUnload == 0 && targetStationToLoad == 0) ->
 	// 		skip;
-	// 	fi;
+		fi;
 	od;
 }
 
@@ -327,6 +460,6 @@ proctype management() {
 init {
 	run management();
 	run shuttle(0, 5, 1, 2);
-	run shuttle(1, 8, 1, 4);
-	run shuttle(2, 10, 2, 3);
+	// run shuttle(1, 8, 1, 4);
+	// run shuttle(2, 10, 2, 3);
 }
