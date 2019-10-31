@@ -96,10 +96,10 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 
 		// make track it was previously travelling on now available again
 		if
-		:: (shuttlePos[shuttleId].origin < shuttlePos[shuttleId].dest && shuttlePos[shuttleId].dest != NUM_SHUTTLES) ->
+		:: (shuttlePos[shuttleId].origin < shuttlePos[shuttleId].dest && shuttlePos[shuttleId].dest != NUM_STATIONS) ->
 			trackAvail[(shuttlePos[shuttleId].dest * 2) - 1] = 1;
 
-		:: (shuttlePos[shuttleId].origin < shuttlePos[shuttleId].dest && shuttlePos[shuttleId].dest == NUM_SHUTTLES) ->
+		:: (shuttlePos[shuttleId].origin < shuttlePos[shuttleId].dest && shuttlePos[shuttleId].dest == NUM_STATIONS) ->
 			if 
 			:: (shuttlePos[shuttleId].origin == 1) ->
 				trackAvail[(shuttlePos[shuttleId].dest * 2)] = 1;
@@ -112,9 +112,9 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 
 		:: (shuttlePos[shuttleId].origin > shuttlePos[shuttleId].dest && shuttlePos[shuttleId].dest == 1) ->
 			if
-			:: (shuttlePos[shuttleId].origin == NUM_SHUTTLES) ->
+			:: (shuttlePos[shuttleId].origin == NUM_STATIONS) ->
 				trackAvail[(shuttlePos[shuttleId].dest * 2) - 1] = 1;
-			:: (shuttlePos[shuttleId].origin != NUM_SHUTTLES) ->
+			:: (shuttlePos[shuttleId].origin != NUM_STATIONS) ->
 				trackAvail[(shuttlePos[shuttleId].dest * 2)] = 1;
 			fi;
 		fi;
@@ -174,15 +174,16 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 			:: else -> skip;
 			fi;
 
-			// 2.2 go to the station that would make the journey to the loading station shortest IF the track to that station is available
+			// 2.2 go onto the track that leads to the station that would make the journey to the loading station shortest 
+			// IF the track is available
 			if
 			:: (difference1 <= difference2) ->
 				if
-				:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 != NUM_SHUTTLES && trackAvail[(nextDest1 * 2) - 1] == 1) ->
+				:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 != NUM_STATIONS && trackAvail[(nextDest1 * 2) - 1] == 1) ->
 					trackAvail[(nextDest1 * 2) - 1] = 0;
 					shuttlePos[shuttleId].dest = nextDest1;
 				
-				:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 == NUM_SHUTTLES) ->
+				:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 == NUM_STATIONS) ->
 					if 
 					:: (shuttlePos[shuttleId].origin == 1 && trackAvail[(nextDest1 * 2)] == 1) ->
 						trackAvail[(nextDest1 * 2)] = 0;
@@ -199,11 +200,11 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 				
 				:: (shuttlePos[shuttleId].origin > nextDest1 && nextDest1 == 1) ->
 					if
-					:: (shuttlePos[shuttleId].origin == NUM_SHUTTLES && trackAvail[(nextDest1 * 2) - 1] == 1) ->
+					:: (shuttlePos[shuttleId].origin == NUM_STATIONS && trackAvail[(nextDest1 * 2) - 1] == 1) ->
 						trackAvail[(nextDest1 * 2) - 1] = 0;
 						shuttlePos[shuttleId].dest = nextDest1;
 
-					:: (shuttlePos[shuttleId].origin != NUM_SHUTTLES && trackAvail[(nextDest1 * 2)] == 1) ->
+					:: (shuttlePos[shuttleId].origin != NUM_STATIONS && trackAvail[(nextDest1 * 2)] == 1) ->
 						trackAvail[(nextDest1 * 2)] = 1;
 						shuttlePos[shuttleId].dest = nextDest1;
 						
@@ -215,11 +216,11 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 				
 			:: (difference1 > difference2) ->
 				if
-				:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 != NUM_SHUTTLES && trackAvail[(nextDest2 * 2) - 1] == 1) ->
+				:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 != NUM_STATIONS && trackAvail[(nextDest2 * 2) - 1] == 1) ->
 					trackAvail[(nextDest2 * 2) - 1] = 0;
 					shuttlePos[shuttleId].dest = nextDest2;
 				
-				:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 == NUM_SHUTTLES) ->
+				:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 == NUM_STATIONS) ->
 					if 
 					:: (shuttlePos[shuttleId].origin == 1 && trackAvail[(nextDest2 * 2)] == 1) ->
 						trackAvail[(nextDest2 * 2)] = 0;
@@ -236,11 +237,11 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 				
 				:: (shuttlePos[shuttleId].origin > nextDest2 && nextDest2 == 1) ->
 					if
-					:: (shuttlePos[shuttleId].origin == NUM_SHUTTLES && trackAvail[(nextDest2 * 2) - 1] == 1) ->
+					:: (shuttlePos[shuttleId].origin == NUM_STATIONS && trackAvail[(nextDest2 * 2) - 1] == 1) ->
 						trackAvail[(nextDest2 * 2) - 1] = 0;
 						shuttlePos[shuttleId].dest = nextDest2;
 
-					:: (shuttlePos[shuttleId].origin != NUM_SHUTTLES && trackAvail[(nextDest2 * 2)] == 1) ->
+					:: (shuttlePos[shuttleId].origin != NUM_STATIONS && trackAvail[(nextDest2 * 2)] == 1) ->
 						trackAvail[(nextDest2 * 2)] = 1;
 						shuttlePos[shuttleId].dest = nextDest2;
 						
@@ -252,7 +253,7 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 			fi;
 			
 		// 3. LOAD ORDER (IF I AM NOT EXECUTING ANY ORDER BUT HAVE ORDERS ASSIGNED)
-		:: (numOrdersBeingExecuted == 0 && numOrdersAssigned != 0 && shuttlePos[shuttleId].dest == ordersAssigned[0].start) ->			
+		:: (numOrdersBeingExecuted == 0 && numOrdersAssigned != 0 && shuttlePos[shuttleId].dest == ordersAssigned[0].start && ordersAssigned[0].load + currLoad <= capacity) ->			
 			
 			ordersBeingExecuted[numOrdersBeingExecuted].start = ordersAssigned[0].start;
 			ordersBeingExecuted[numOrdersBeingExecuted].end = ordersAssigned[0].end;
@@ -329,15 +330,16 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 			:: else -> skip;
 			fi;
 
-			// 4.2 go to the station that would make the journey to the unloading station shortest IF the track to that station is available
+			// 4.2 go onto the track that leads to the station that would make the journey to the unloading station shortest 
+			// IF the track is available
 			if
 			:: (difference1 <= difference2) ->
 				if
-				:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 != NUM_SHUTTLES && trackAvail[(nextDest1 * 2) - 1] == 1) ->
+				:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 != NUM_STATIONS && trackAvail[(nextDest1 * 2) - 1] == 1) ->
 					trackAvail[(nextDest1 * 2) - 1] = 0;
 					shuttlePos[shuttleId].dest = nextDest1;
 				
-				:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 == NUM_SHUTTLES) ->
+				:: (shuttlePos[shuttleId].origin < nextDest1 && nextDest1 == NUM_STATIONS) ->
 					if 
 					:: (shuttlePos[shuttleId].origin == 1 && trackAvail[(nextDest1 * 2)] == 1) ->
 						trackAvail[(nextDest1 * 2)] = 0;
@@ -354,11 +356,11 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 				
 				:: (shuttlePos[shuttleId].origin > nextDest1 && nextDest1 == 1) ->
 					if
-					:: (shuttlePos[shuttleId].origin == NUM_SHUTTLES && trackAvail[(nextDest1 * 2) - 1] == 1) ->
+					:: (shuttlePos[shuttleId].origin == NUM_STATIONS && trackAvail[(nextDest1 * 2) - 1] == 1) ->
 						trackAvail[(nextDest1 * 2) - 1] = 0;
 						shuttlePos[shuttleId].dest = nextDest1;
 
-					:: (shuttlePos[shuttleId].origin != NUM_SHUTTLES && trackAvail[(nextDest1 * 2)] == 1) ->
+					:: (shuttlePos[shuttleId].origin != NUM_STATIONS && trackAvail[(nextDest1 * 2)] == 1) ->
 						trackAvail[(nextDest1 * 2)] = 1;
 						shuttlePos[shuttleId].dest = nextDest1;
 						
@@ -370,11 +372,11 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 				
 			:: (difference1 > difference2) ->
 				if
-				:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 != NUM_SHUTTLES && trackAvail[(nextDest2 * 2) - 1] == 1) ->
+				:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 != NUM_STATIONS && trackAvail[(nextDest2 * 2) - 1] == 1) ->
 					trackAvail[(nextDest2 * 2) - 1] = 0;
 					shuttlePos[shuttleId].dest = nextDest2;
 				
-				:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 == NUM_SHUTTLES) ->
+				:: (shuttlePos[shuttleId].origin < nextDest2 && nextDest2 == NUM_STATIONS) ->
 					if 
 					:: (shuttlePos[shuttleId].origin == 1 && trackAvail[(nextDest2 * 2)] == 1) ->
 						trackAvail[(nextDest2 * 2)] = 0;
@@ -391,11 +393,11 @@ proctype shuttle(int shuttleId; int capacity; int startStation; int charge) {
 				
 				:: (shuttlePos[shuttleId].origin > nextDest2 && nextDest2 == 1) ->
 					if
-					:: (shuttlePos[shuttleId].origin == NUM_SHUTTLES && trackAvail[(nextDest2 * 2) - 1] == 1) ->
+					:: (shuttlePos[shuttleId].origin == NUM_STATIONS && trackAvail[(nextDest2 * 2) - 1] == 1) ->
 						trackAvail[(nextDest2 * 2) - 1] = 0;
 						shuttlePos[shuttleId].dest = nextDest2;
 
-					:: (shuttlePos[shuttleId].origin != NUM_SHUTTLES && trackAvail[(nextDest2 * 2)] == 1) ->
+					:: (shuttlePos[shuttleId].origin != NUM_STATIONS && trackAvail[(nextDest2 * 2)] == 1) ->
 						trackAvail[(nextDest2 * 2)] = 1;
 						shuttlePos[shuttleId].dest = nextDest2;
 						
@@ -454,6 +456,16 @@ proctype management() {
 	orders[1].end = 3;
 	orders[1].load = 1;
 	orders[1].orderOrAssign = 0;
+
+	// initialise trackAvail array
+	do
+	:: (dummy != (NUM_STATIONS*2)+1) ->
+		trackAvail[dummy] = 1;
+		dummy = dummy + 1;
+	:: (dummy == (NUM_STATIONS*2)+1) ->
+		dummy = 0;
+		break;
+	od;
 
 	do
 	:: (dummy == NUM_ORDERS) ->
