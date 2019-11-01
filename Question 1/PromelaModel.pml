@@ -1,5 +1,5 @@
-#define ARRAY_SIZE	7
-#define NUM_CLIENTS	5
+#define ARRAY_SIZE	5
+#define NUM_CLIENTS	3
 
 mtype = {disconn, disable, enable, idle, preini, ini, postini, reqConn, 
 	succGetWtr, failGetWtr, succUseNewWtr, failUseNewWtr, succUseOldWtr, failUseOldWtr, 
@@ -323,9 +323,8 @@ proctype WCP() {
 
 init {
 	run WCP();
-	// clients are put with ids 2,3,4 to match their process ids
+	run client(0);
+	run client(1);
 	run client(2);
-	run client(3);
-	run client(4);
 	run CM();
 }
