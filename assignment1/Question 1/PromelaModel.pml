@@ -17,7 +17,7 @@ chan CMtoclients[NUM_CLIENTS] = [ARRAY_SIZE] of {mtype};
 chan clientstoCM = [ARRAY_SIZE] of {clienttoCMReqRep};
 
 mtype WCPstatus = enable;
-mtype clientsStatus[NUM_CLIENTS] = {disconn, disconn, disconn, disconn, disconn};
+mtype clientsStatus[NUM_CLIENTS] = {disconn, disconn, disconn};
 
 proctype client(int client_id) {
 	mtype CMInmessage;	// CM incoming message

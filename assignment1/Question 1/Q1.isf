@@ -19,7 +19,7 @@ Fname	PromelaModel.pml
 17	chan clientstoCM = [ARRAY_SIZE] of {clienttoCMReqRep};
 18	
 19	mtype WCPstatus = enable;
-20	mtype clientsStatus[NUM_CLIENTS] = {disconn, disconn, disconn, disconn, disconn};
+20	mtype clientsStatus[NUM_CLIENTS] = {disconn, disconn, disconn};
 21	
 22	proctype client(int client_id) {
 23		mtype CMInmessage;	// CM incoming message
@@ -337,84 +337,9 @@ Fname	PromelaModel.pml
 Spin Version 6.5.0 -- 1 July 2019
 iSpin Version 1.1.4 -- 27 November 2014
 TclTk Version 8.6/8.6
-1 C:/Users/Brandon/Desktop/Brandon/Uni/Sem5/CS4211/Assignment/A0172029J/assignment1/Question 1/PromelaModel.pml:1
-2 syntax check
-spin: nothing to report
-3 verification
-4 simulate/replay
-5 C:/Users/Brandon/Desktop/Brandon/Uni/Sem5/CS4211/Assignment/A0172029J/assignment1/Question 1/PromelaModel.pml:1
-6 verification
-7 C:/Users/Brandon/Desktop/Brandon/Uni/Sem5/CS4211/Assignment/A0172029J/assignment1/Question 1/PromelaModel.pml:1
-8 verification
-9 simulate/replay
-10 C:/Users/Brandon/Desktop/Brandon/Uni/Sem5/CS4211/Assignment/A0172029J/assignment1/Question 1/PromelaModel.pml:1
-11 syntax check
-spin: nothing to report
-12 simulate/replay
-13 verification
-14 C:/Users/Brandon/Desktop/Brandon/Uni/Sem5/CS4211/Assignment/A0172029J/assignment1/Question 1/PromelaModel.pml:1
-15 verification
-16 C:/Users/Brandon/Desktop/Brandon/Uni/Sem5/CS4211/Assignment/A0172029J/assignment1/Question 1/PromelaModel.pml:1
-17 verification
-18 C:/Users/Brandon/Desktop/Brandon/Uni/Sem5/CS4211/Assignment/A0172029J/assignment1/Question 1/PromelaModel.pml:1
-19 verification
-20 simulate/replay
-21 verification
-22 simulate/replay
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-23 verification
-24 simulate/replay
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "WCP": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "CM": no such file or directory
-couldn't open "client": no such file or directory
+1 C:/Users/Brandon/Desktop/A0172029J/assignment1/Question 1/PromelaModel.pml:1
+2 verification
+3 simulate/replay
 
 
 ===end Model Log===
@@ -433,34 +358,37 @@ Vars
 Track	
 Scale	
 ===start Data===
-[variable values, step 9704]
+[variable values, step 9988]
 
  CM(5):WCPInMessage  =  reqUpdate
- CM(5):clientConnecting  =  0
- CM(5):clientInReqRep.client_id  =  0
- CM(5):clientInReqRep.message  =  succUseNewWtr
+ CM(5):clientConnecting  =  1
+ CM(5):clientInReqRep.client_id  =  1
+ CM(5):clientInReqRep.message  =  succGetWtr
  CM(5):clientsConnected[0]  =  2
  CM(5):clientsConnected[1]  =  0
- CM(5):clientsConnected[2]  =  0
+ CM(5):clientsConnected[2]  =  1
  CM(5):dummy  =  0
  CM(5):dummy2  =  0
- CM(5):numClientsConnected  =  2
- CM(5):numClientsReportSuccGetWtr  =  0
+ CM(5):numClientsConnected  =  3
+ CM(5):numClientsReportSuccGetWtr  =  1
  CM(5):numClientsReportSuccUseNewWtr  =  0
  CM(5):numClientsReportSuccUseOldWtr  =  0
- CM(5):status  =  idle
+ CM(5):status  =  ini
  WCPstatus  =  disable
  client(2):CMInmessage  =  useNewWtr
+ client(2):client_id  =  0
  client(2):req_rep.client_id  =  0
  client(2):req_rep.message  =  succUseNewWtr
- client(3):CMInmessage  =  disconn
+ client(3):CMInmessage  =  getNewWtr
+ client(3):client_id  =  1
  client(3):req_rep.client_id  =  1
- client(3):req_rep.message  =  reqConn
+ client(3):req_rep.message  =  succGetWtr
  client(4):CMInmessage  =  useNewWtr
+ client(4):client_id  =  2
  client(4):req_rep.client_id  =  2
  client(4):req_rep.message  =  succUseNewWtr
  clientsStatus[0]  =  idle
- clientsStatus[1]  =  disconn
+ clientsStatus[1]  =  ini
  clientsStatus[2]  =  idle
 
 
@@ -11947,9 +11875,9 @@ Exit-Status 0
 
 ===end Sim===
 ===start Queues===
-[queues, step 9704]
+[queues, step 9988]
 
-q 1  :: (clientstoCM): [1,reqConn]
+q 1  :: (clientstoCM): 
 q 2  :: (CMtoclients[0]): 
 q 3  :: (CMtoclients[1]): 
 q 4  :: (CMtoclients[2]): 
@@ -11978,22 +11906,14 @@ sv_mode	0
 u_mode	1
 vranges	0
 x_mode	0
-vrow0		1024
-vrow1		1000
-vrow2		10000
-vrow3		3
-vrow4		100
-vrow5		
-vrow6		-O2
-vrow7		
 ===start VerOut===
 verification result:
 spin -a  PromelaModel.pml
 gcc -DMEMLIM=1024 -O2 -DXUSAFE -DSAFETY -DNOCLAIM -w -o pan pan.c
 ./pan -m10000  -A
-Pid: 14816
+Pid: 17156
 error: max search depth too small
-Depth=    9999 States=    1e+06 Transitions= 1.97e+06 Memory=   334.784	t=      1.7 R=   6e+05
+Depth=    9999 States=    1e+06 Transitions= 1.97e+06 Memory=   334.784	t=    0.833 R=   1e+06
 pan:1: invalid end state (at depth 9987)
 pan: wrote PromelaModel.pml.trail
 
@@ -12024,293 +11944,7 @@ Stats on memory usage (in Megabytes):
 
 
 
-pan: elapsed time 1.88 seconds
-To replay the error-trail, goto Simulate/Replay and select "Run"
-spin -a  PromelaModel.pml
-gcc -DMEMLIM=1024 -O2 -DXUSAFE -DSAFETY -DNOCLAIM -w -o pan pan.c
-./pan -m100000  -A
-Pid: 20984
-error: max search depth too small
-Depth=   99999 States=    1e+06 Transitions= 1.98e+06 Memory=   339.981	t=     1.53 R=   7e+05
-Depth=   99999 States=    2e+06 Transitions= 4.02e+06 Memory=   546.036	t=      2.9 R=   7e+05
-Depth=   99999 States=    3e+06 Transitions= 6.35e+06 Memory=   751.993	t=      5.2 R=   6e+05
-Depth=   99999 States=    4e+06 Transitions= 8.57e+06 Memory=   958.048	t=     9.97 R=   4e+05
-pan: reached -DMEMLIM bound
-	1.07371e+09 bytes used
-	102400 bytes more needed
-	1.07374e+09 bytes limit
-hint: to reduce memory, recompile with
-  -DCOLLAPSE # good, fast compression, or
-  -DMA=216   # better/slower compression, or
-  -DHC # hash-compaction, approximation
-  -DBITSTATE # supertrace, approximation
-
-(Spin Version 6.5.0 -- 1 July 2019)
-Warning: Search not completed
-	+ Partial Order Reduction
-
-Full statespace search for:
-	never claim         	- (not selected)
-	assertion violations	- (disabled by -A flag)
-	cycle checks       	- (disabled by -DSAFETY)
-	invalid end states	+
-
-State-vector 216 byte, depth reached 99999, errors: 0
-  4320220 states, stored
-  5043180 states, matched
-  9363400 transitions (= stored+matched)
-        0 atomic steps
-hash conflicts:    276266 (resolved)
-
-Stats on memory usage (in Megabytes):
- 1005.300	equivalent memory usage for states (stored*(State-vector + overhead))
-  890.861	actual memory usage for states (compression: 88.62%)
-         	state-vector as stored = 188 byte + 28 byte overhead
-  128.000	memory used for hash table (-w24)
-    5.341	memory used for DFS stack (-m100000)
- 1023.966	total actual memory usage
-
-
-
-pan: elapsed time 11.3 seconds
-No errors found -- did you verify all claims?
-spin -a  PromelaModel.pml
-gcc -DMEMLIM=1024 -O2 -DXUSAFE -DSAFETY -DNOCLAIM -w -o pan pan.c
-./pan -m100000  -A
-Pid: 12804
-error: max search depth too small
-Depth=   99999 States=    1e+06 Transitions= 1.91e+06 Memory=   339.981	t=     2.18 R=   5e+05
-Depth=   99999 States=    2e+06 Transitions= 4.17e+06 Memory=   545.938	t=      3.5 R=   6e+05
-Depth=   99999 States=    3e+06 Transitions= 6.69e+06 Memory=   751.993	t=     4.67 R=   6e+05
-Depth=   99999 States=    4e+06 Transitions= 9.17e+06 Memory=   958.048	t=     5.85 R=   7e+05
-pan: reached -DMEMLIM bound
-	1.07371e+09 bytes used
-	102400 bytes more needed
-	1.07374e+09 bytes limit
-hint: to reduce memory, recompile with
-  -DCOLLAPSE # good, fast compression, or
-  -DMA=216   # better/slower compression, or
-  -DHC # hash-compaction, approximation
-  -DBITSTATE # supertrace, approximation
-
-(Spin Version 6.5.0 -- 1 July 2019)
-Warning: Search not completed
-	+ Partial Order Reduction
-
-Full statespace search for:
-	never claim         	- (not selected)
-	assertion violations	- (disabled by -A flag)
-	cycle checks       	- (disabled by -DSAFETY)
-	invalid end states	+
-
-State-vector 216 byte, depth reached 99999, errors: 0
-  4320337 states, stored
-  5667335 states, matched
-  9987672 transitions (= stored+matched)
-        0 atomic steps
-hash conflicts:    316851 (resolved)
-
-Stats on memory usage (in Megabytes):
- 1005.327	equivalent memory usage for states (stored*(State-vector + overhead))
-  890.860	actual memory usage for states (compression: 88.61%)
-         	state-vector as stored = 188 byte + 28 byte overhead
-  128.000	memory used for hash table (-w24)
-    5.341	memory used for DFS stack (-m100000)
- 1023.966	total actual memory usage
-
-
-
-pan: elapsed time 6.23 seconds
-No errors found -- did you verify all claims?
-spin -a  PromelaModel.pml
-gcc -DMEMLIM=1024 -O2 -DXUSAFE -DSAFETY -DNOCLAIM -w -o pan pan.c
-./pan -m10000  -A
-Pid: 8872
-error: max search depth too small
-Depth=    9999 States=    1e+06 Transitions= 1.97e+06 Memory=   334.784	t=     1.17 R=   9e+05
-pan:1: invalid end state (at depth 9987)
-pan: wrote PromelaModel.pml.trail
-
-(Spin Version 6.5.0 -- 1 July 2019)
-Warning: Search not completed
-	+ Partial Order Reduction
-
-Full statespace search for:
-	never claim         	- (not selected)
-	assertion violations	- (disabled by -A flag)
-	cycle checks       	- (disabled by -DSAFETY)
-	invalid end states	+
-
-State-vector 216 byte, depth reached 9999, errors: 1
-  1021560 states, stored
-   996888 states, matched
-  2018448 transitions (= stored+matched)
-        0 atomic steps
-hash conflicts:      8771 (resolved)
-
-Stats on memory usage (in Megabytes):
-  237.713	equivalent memory usage for states (stored*(State-vector + overhead))
-  210.753	actual memory usage for states (compression: 88.66%)
-         	state-vector as stored = 188 byte + 28 byte overhead
-  128.000	memory used for hash table (-w24)
-    0.534	memory used for DFS stack (-m10000)
-  339.179	total actual memory usage
-
-
-
-pan: elapsed time 1.27 seconds
-To replay the error-trail, goto Simulate/Replay and select "Run"
-	Estimated State Space Size:
-	This parameter is used to calculate the size of the
-	hash-table. It results in a selection of a numeric argument
-	for the -w flag of the verifier. Setting it too high may
-	cause an out-of-memory error with zero states reached
-	(meaning that the verification could not be started).
-	Setting it too low can cause inefficiencies due to
-	hash collisions.
-	
-	When using bitstate, start with the default
-	setting.  After a run completes successfully,
-	double the estimate, and see if the number of reached
-	stated changes much.  Continue to do this until
-	it stops changing, or until you reach the memory bound.
-	
-	iSpin uses the closest power of two to determine the parameter
-	given to the -w flag that is used for the run.
-
-spin -a  PromelaModel.pml
-gcc -DMEMLIM=1024 -O2 -DXUSAFE -DSAFETY -DNOCLAIM -w -o pan pan.c
-./pan -m100000  -A
-Pid: 10536
-error: max search depth too small
-Depth=   99999 States=    1e+06 Transitions= 1.98e+06 Memory=   339.981	t=     0.91 R=   1e+06
-Depth=   99999 States=    2e+06 Transitions= 4.02e+06 Memory=   546.036	t=     1.87 R=   1e+06
-Depth=   99999 States=    3e+06 Transitions= 6.35e+06 Memory=   751.993	t=      2.9 R=   1e+06
-Depth=   99999 States=    4e+06 Transitions= 8.57e+06 Memory=   958.048	t=     3.96 R=   1e+06
-pan: reached -DMEMLIM bound
-	1.07371e+09 bytes used
-	102400 bytes more needed
-	1.07374e+09 bytes limit
-hint: to reduce memory, recompile with
-  -DCOLLAPSE # good, fast compression, or
-  -DMA=216   # better/slower compression, or
-  -DHC # hash-compaction, approximation
-  -DBITSTATE # supertrace, approximation
-
-(Spin Version 6.5.0 -- 1 July 2019)
-Warning: Search not completed
-	+ Partial Order Reduction
-
-Full statespace search for:
-	never claim         	- (not selected)
-	assertion violations	- (disabled by -A flag)
-	cycle checks       	- (disabled by -DSAFETY)
-	invalid end states	+
-
-State-vector 216 byte, depth reached 99999, errors: 0
-  4320220 states, stored
-  5043180 states, matched
-  9363400 transitions (= stored+matched)
-        0 atomic steps
-hash conflicts:    276266 (resolved)
-
-Stats on memory usage (in Megabytes):
- 1005.300	equivalent memory usage for states (stored*(State-vector + overhead))
-  890.861	actual memory usage for states (compression: 88.62%)
-         	state-vector as stored = 188 byte + 28 byte overhead
-  128.000	memory used for hash table (-w24)
-    5.341	memory used for DFS stack (-m100000)
- 1023.966	total actual memory usage
-
-
-
-pan: elapsed time 4.3 seconds
-No errors found -- did you verify all claims?
-spin -a  PromelaModel.pml
-gcc -DMEMLIM=1024 -O2 -DXUSAFE -DSAFETY -DNOCLAIM -w -o pan pan.c
-./pan -m100000  -A
-Pid: 3940
-error: max search depth too small
-Depth=   99999 States=    1e+06 Transitions= 1.91e+06 Memory=   339.981	t=    0.947 R=   1e+06
-Depth=   99999 States=    2e+06 Transitions= 4.17e+06 Memory=   545.938	t=     1.94 R=   1e+06
-Depth=   99999 States=    3e+06 Transitions= 6.69e+06 Memory=   751.993	t=     2.91 R=   1e+06
-Depth=   99999 States=    4e+06 Transitions= 9.17e+06 Memory=   958.048	t=      3.9 R=   1e+06
-pan: reached -DMEMLIM bound
-	1.07371e+09 bytes used
-	102400 bytes more needed
-	1.07374e+09 bytes limit
-hint: to reduce memory, recompile with
-  -DCOLLAPSE # good, fast compression, or
-  -DMA=216   # better/slower compression, or
-  -DHC # hash-compaction, approximation
-  -DBITSTATE # supertrace, approximation
-
-(Spin Version 6.5.0 -- 1 July 2019)
-Warning: Search not completed
-	+ Partial Order Reduction
-
-Full statespace search for:
-	never claim         	- (not selected)
-	assertion violations	- (disabled by -A flag)
-	cycle checks       	- (disabled by -DSAFETY)
-	invalid end states	+
-
-State-vector 216 byte, depth reached 99999, errors: 0
-  4320337 states, stored
-  5667335 states, matched
-  9987672 transitions (= stored+matched)
-        0 atomic steps
-hash conflicts:    316851 (resolved)
-
-Stats on memory usage (in Megabytes):
- 1005.327	equivalent memory usage for states (stored*(State-vector + overhead))
-  890.860	actual memory usage for states (compression: 88.61%)
-         	state-vector as stored = 188 byte + 28 byte overhead
-  128.000	memory used for hash table (-w24)
-    5.341	memory used for DFS stack (-m100000)
- 1023.966	total actual memory usage
-
-
-
-pan: elapsed time 4.25 seconds
-No errors found -- did you verify all claims?
-spin -a  PromelaModel.pml
-gcc -DMEMLIM=1024 -O2 -DXUSAFE -DSAFETY -DNOCLAIM -w -o pan pan.c
-./pan -m10000  -A
-Pid: 5140
-error: max search depth too small
-Depth=    9999 States=    1e+06 Transitions= 1.97e+06 Memory=   334.784	t=    0.824 R=   1e+06
-pan:1: invalid end state (at depth 9987)
-pan: wrote PromelaModel.pml.trail
-
-(Spin Version 6.5.0 -- 1 July 2019)
-Warning: Search not completed
-	+ Partial Order Reduction
-
-Full statespace search for:
-	never claim         	- (not selected)
-	assertion violations	- (disabled by -A flag)
-	cycle checks       	- (disabled by -DSAFETY)
-	invalid end states	+
-
-State-vector 216 byte, depth reached 9999, errors: 1
-  1021560 states, stored
-   996888 states, matched
-  2018448 transitions (= stored+matched)
-        0 atomic steps
-hash conflicts:      8771 (resolved)
-
-Stats on memory usage (in Megabytes):
-  237.713	equivalent memory usage for states (stored*(State-vector + overhead))
-  210.753	actual memory usage for states (compression: 88.66%)
-         	state-vector as stored = 188 byte + 28 byte overhead
-  128.000	memory used for hash table (-w24)
-    0.534	memory used for DFS stack (-m10000)
-  339.179	total actual memory usage
-
-
-
-pan: elapsed time 0.911 seconds
+pan: elapsed time 0.923 seconds
 To replay the error-trail, goto Simulate/Replay and select "Run"
 
 
